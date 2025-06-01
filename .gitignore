@@ -1,0 +1,6 @@
+#Exel/Libreoffice Calc lockfiles
+.~lock.*
+~.*
+
+*.psd
+Packaging/Verpackung_UC2_final/Software_Box_Mockup_4.psd
