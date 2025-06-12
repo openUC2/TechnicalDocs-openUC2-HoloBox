@@ -4,3 +4,14 @@
 
 *.psd
 Packaging/Verpackung_UC2_final/Software_Box_Mockup_4.psd
+
+# SSL certificates (local development only)
+Software/ssl_certs/
+*.key
+*.crt
+*.pem
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo

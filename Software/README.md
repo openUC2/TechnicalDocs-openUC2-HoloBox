@@ -21,23 +21,48 @@ This reorganized software provides a streamlined FastAPI backend for camera stre
 ## Usage
 
 ### 1. Start the API Server
+
+#### Basic HTTP Server
 ```bash
 cd Software
 python streamlined_camera_api.py
 ```
 Server runs on `http://localhost:8000`
 
-### 2. Access Web Interface
-Navigate to `http://localhost:8000/static/` in your browser
+#### HTTPS Server (for GitHub Pages integration)
+First generate SSL certificates:
+```bash
+python generate_ssl_cert.py
+```
 
-### 3. Camera Controls
+Then start with SSL:
+```bash
+python streamlined_camera_api.py --ssl-keyfile ssl_certs/server.key --ssl-certfile ssl_certs/server.crt
+```
+Server runs on `https://localhost:8000`
+
+**Note**: Self-signed certificates will show browser warnings. This is normal for development/testing.
+
+### 2. Access Web Interface
+- HTTP: Navigate to `http://localhost:8000/static/`
+- HTTPS: Navigate to `https://localhost:8000/static/`
+
+### 3. Cross-Origin Access (CORS)
+The server now supports CORS (Cross-Origin Resource Sharing), allowing access from:
+- Static file servers (like VS Code Live Server)
+- GitHub Pages
+- Other domains
+
+In the web interface, set the API URL to point to your server (e.g., `https://localhost:8000`).
+
+### 4. Camera Controls
 - **Start Stream**: Begin camera streaming
 - **Stop Stream**: Stop camera streaming  
 - **Set Exposure**: Adjust camera exposure time (microseconds)
 - **Set Gain**: Adjust analogue gain
 - **Capture**: Take single JPEG snapshot
 
-### 4. Hologram Processing
+### 5. Hologram Processing
 - **Wavelength**: Adjust laser wavelength (380-700 nm)
 - **Pixel Size**: Set camera pixel size (0.5-5.0 µm)
 - **Distance**: Set propagation distance (0.1-20.0 mm)

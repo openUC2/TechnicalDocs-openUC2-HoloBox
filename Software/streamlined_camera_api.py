@@ -10,6 +10,7 @@ Streamlined FastAPI service for Raspberry Pi camera with hologram processing sup
 from fastapi import FastAPI, Response, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import numpy as np
 import cv2
@@ -61,6 +62,15 @@ except ImportError:
     Picamera2 = MockPicamera2
 
 app = FastAPI(title="Streamlined Camera API", description="Camera streaming and processing API")
+
+# Add CORS middleware to allow cross-origin requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify exact origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Initialize camera
 if CAMERA_AVAILABLE:
@@ -170,4 +180,25 @@ def stats():
     }
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Streamlined Camera API Server")
+    parser.add_argument("--host", default="0.0.0.0", help="Host to bind to")
+    parser.add_argument("--port", default=8000, type=int, help="Port to bind to")
+    parser.add_argument("--ssl-keyfile", help="SSL private key file")
+    parser.add_argument("--ssl-certfile", help="SSL certificate file")
+    args = parser.parse_args()
+    
+    # Configure SSL if certificates provided
+    ssl_kwargs = {}
+    if args.ssl_keyfile and args.ssl_certfile:
+        ssl_kwargs = {
+            "ssl_keyfile": args.ssl_keyfile,
+            "ssl_certfile": args.ssl_certfile
+        }
+        print(f"Starting server with SSL on https://{args.host}:{args.port}")
+    else:
+        print(f"Starting server on http://{args.host}:{args.port}")
+        print("For SSL support, use --ssl-keyfile and --ssl-certfile arguments")
+    
+    uvicorn.run(app, host=args.host, port=args.port, **ssl_kwargs)
