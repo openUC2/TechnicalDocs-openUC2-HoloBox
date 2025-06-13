@@ -65,7 +65,7 @@ def process_image_data(image_data, width, height):
         
         # Convert image data to numpy array
         # ImageData is in RGBA format
-        img_array = np.array(image_data).reshape((height, width, 4))
+        img_array = np.array(image_data).reshape((height, width, 4)).copy()
         
         if debug_mode:
             console.log(f"Debug: Image array shape: {img_array.shape}")
