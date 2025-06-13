@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>HoloBox Camera & Processor</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://pyscript.net/releases/2025.5.1/core.css" />
+  <script type="module" src="https://pyscript.net/releases/2025.5.1/core.js"></script>  
+  <style>
+    #stream, #processed { max-width: 100%; border: 1px solid #ccc; margin: 10px; }
+    .video-container { display: flex; justify-content: space-around; flex-wrap: wrap; }
+    .controls-panel { background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; }
+    .slider-container { margin: 10px 0; }
+    .processing-status { 
+      padding: 10px; 
+      margin: 10px 0; 
+      border-radius: 4px; 
+      background: #e7f1ff; 
+      border: 1px solid #b3d9ff;
+    }
+  </style>
+</head>
+<body class="bg-light">
+
+<nav class="navbar navbar-dark bg-dark px-3">
+  <span class="navbar-brand">HoloBox Camera & Processing</span>
+  <div class="d-flex">
+    <input id="host" class="form-control me-2" style="width:20rem" placeholder="http://localhost:8000 or https://localhost:8000">
+    <button id="setHost" class="btn btn-outline-light">Set API URL</button>
+  </div>
+</nav>
+
+<div class="container-fluid py-4">
+  
+  <!-- Camera Stream and Processed Output -->
+  <div class="video-container">
+    <div class="text-center">
+      <h5>Original Camera Stream</h5>
+      <img id="stream" alt="Stream not running">
+    </div>
+    <div class="text-center">
+      <h5>Fresnel Propagated</h5>
+      <canvas id="processed" width="640" height="480"></canvas>
+    </div>
+  </div>
+
+  <!-- Camera Controls -->
+  <div class="controls-panel">
+    <h6>Camera Controls</h6>
+    <div class="row g-3">
+      <div class="col-auto">
+        <button id="startBtn" class="btn btn-success">Start Stream</button>
+        <button id="stopBtn" class="btn btn-danger">Stop Stream</button>
+      </div>
+      <div class="col-auto">
+        <div class="input-group">
+          <span class="input-group-text">Exposure (µs)</span>
+          <input id="exposure" type="number" class="form-control" min="1" value="10000">
+          <button id="setExposure" class="btn btn-primary">Set</button>
+        </div>
+      </div>
+      <div class="col-auto">
+        <div class="input-group">
+          <span class="input-group-text">Analogue Gain</span>
+          <input id="gain" type="number" step="0.01" class="form-control" min="0" value="1.0">
+          <button id="setGain" class="btn btn-primary">Set</button>
+        </div>
+      </div>
+      <div class="col-auto">
+        <button id="captureBtn" class="btn btn-warning">Capture JPEG</button>
+        <a id="downloadLink" class="btn btn-outline-secondary d-none" download="capture.jpg">Download</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hologram Processing Controls -->
+  <div class="controls-panel">
+    <h6>Hologram Processing Parameters</h6>
+    <div class="row g-3">
+      <div class="col-md-4">
+        <div class="slider-container">
+          <label for="wavelength" class="form-label">Wavelength (nm): <span id="wavelength-value">440</span></label>
+          <input type="range" class="form-range" id="wavelength" min="380" max="700" value="440" step="10">
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="slider-container">
+          <label for="pixelsize" class="form-label">Pixel Size (µm): <span id="pixelsize-value">1.4</span></label>
+          <input type="range" class="form-range" id="pixelsize" min="0.5" max="5.0" value="1.4" step="0.1">
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="slider-container">
+          <label for="dz" class="form-label">Distance (mm): <span id="dz-value">5.0</span></label>
+          <input type="range" class="form-range" id="dz" min="0.1" max="20.0" value="5.0" step="0.1">
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-auto">
+        <button id="toggleProcessing" class="btn btn-info">Enable Processing</button>
+        <button id="processFrame" class="btn btn-secondary">Process Current Frame</button>
+        <button id="toggleDebug" class="btn btn-outline-warning">Enable Debug</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status Information -->
+  <div class="processing-status">
+    <strong>Status:</strong> <span id="status">Ready</span><br>
+    <strong>Processing:</strong> <span id="processing-enabled">Disabled</span><br>
+    <strong>Debug Mode:</strong> <span id="debug-status">Enabled</span><br>
+    <strong>Last Frame:</strong> <span id="last-processed">None</span>
+  </div>
+
+</div>
+
+<!-- PyScript Configuration -->
+<py-config>
+  packages = ["numpy", "scipy"]
+</py-config>
+
+<!-- External PyScript file -->
+<py-script src="./hologram_processing.py"></py-script>
+
+<!-- External JavaScript file -->
+<script src="./camera_controls.js"></script>
+
+</body>
+</html>
