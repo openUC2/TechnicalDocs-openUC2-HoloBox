@@ -155,7 +155,15 @@ def process_image_data(image_data, width, height):
         if debug_mode:
             console.log(f"Debug: Final result shape: {result.shape}")
         
-        return result.flatten()
+        # Convert to Python list to avoid proxy destruction issues
+        # This ensures the data is properly copied and won't be garbage collected
+        result_flattened = result.flatten()
+        result_list = result_flattened.tolist()
+        
+        if debug_mode:
+            console.log(f"Debug: Converted to list with length: {len(result_list)}")
+        
+        return result_list
         
     except Exception as e:
         console.log(f"Processing error: {e}")
@@ -198,12 +206,25 @@ def process_frame_from_snapshot():
                     processed_data = process_image_data(image_data.data, temp_canvas.width, temp_canvas.height)
                     
                     if processed_data is not None:
+                        if debug_mode:
+                            console.log(f"Debug: Received processed data with length: {len(processed_data)}")
+                        
                         # Display on the main canvas
                         canvas = document.getElementById('processed')
                         ctx = canvas.getContext('2d')
                         
+                        # Convert Python list to Uint8ClampedArray for ImageData
+                        # This avoids the proxy destruction issue
+                        uint8_array = Uint8ClampedArray.new(processed_data)
+                        
+                        if debug_mode:
+                            console.log(f"Debug: Created Uint8ClampedArray with length: {uint8_array.length}")
+                        
                         # Create new image data and display
-                        new_image_data = ImageData.new(Uint8ClampedArray.new(processed_data), temp_canvas.width, temp_canvas.height)
+                        new_image_data = ImageData.new(uint8_array, temp_canvas.width, temp_canvas.height)
+                        
+                        if debug_mode:
+                            console.log(f"Debug: Created ImageData with size: {temp_canvas.width}x{temp_canvas.height}")
                         
                         # Scale to fit canvas
                         ctx.clearRect(0, 0, canvas.width, canvas.height)
@@ -216,16 +237,34 @@ def process_frame_from_snapshot():
                         # Scale and draw to main canvas
                         ctx.drawImage(temp_canvas2, 0, 0, canvas.width, canvas.height)
                         
+                        if debug_mode:
+                            console.log("Debug: Successfully updated processed canvas")
+                        
                         # Update status with current time from JS Date object
                         from js import Date
                         document.getElementById('last-processed').textContent = Date.new().toLocaleTimeString()
                     
-                    # Clean up
+                    # Clean up all references
                     from js import URL
                     URL.revokeObjectURL(img.src)
                     
+                    # Clear temporary variables to help with garbage collection
+                    temp_canvas = None
+                    temp_ctx = None
+                    temp_canvas2 = None
+                    temp_ctx2 = None
+                    uint8_array = None
+                    new_image_data = None
+                    
                 except Exception as e:
                     console.log(f"Snapshot processing error: {e}")
+                    if debug_mode:
+                        console.log(f"Debug: Exception in image processing: {type(e).__name__}")
+                        import traceback
+                        console.log(f"Debug: Traceback: {traceback.format_exc()}")
+                    
+                    # Show error status to user
+                    document.getElementById('status').textContent = f'Processing error: {e}'
             
             img.onload = create_proxy(on_image_load)
             from js import URL
