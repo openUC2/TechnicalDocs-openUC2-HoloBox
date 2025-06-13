@@ -9,6 +9,7 @@ processing_interval = None
 current_wavelength = 440e-9  # nm to m
 current_pixelsize = 1.4e-6   # µm to m  
 current_dz = 0.005           # mm to m
+debug_mode = True            # Enable detailed debugging
 
 def abssqr(x):
     """Calculate intensity (what a detector sees)"""
@@ -59,13 +60,22 @@ def fresnel_propagator(E0, ps, lambda0, z):
 def process_image_data(image_data, width, height):
     """Process image data through Fresnel propagation"""
     try:
+        if debug_mode:
+            console.log(f"Debug: Starting process_image_data with width={width}, height={height}")
+        
         # Convert image data to numpy array
         # ImageData is in RGBA format
         img_array = np.array(image_data).reshape((height, width, 4))
         
+        if debug_mode:
+            console.log(f"Debug: Image array shape: {img_array.shape}")
+        
         # Convert to grayscale and normalize
         gray = img_array[:, :, 0] * 0.299 + img_array[:, :, 1] * 0.587 + img_array[:, :, 2] * 0.114
         gray = gray / 255.0
+        
+        if debug_mode:
+            console.log(f"Debug: Grayscale shape: {gray.shape}")
         
         # Crop to smaller size for faster processing (power of 2)
         crop_size = min(256, min(height, width))
@@ -73,28 +83,67 @@ def process_image_data(image_data, width, height):
         start_x = (width - crop_size) // 2
         cropped = gray[start_y:start_y + crop_size, start_x:start_x + crop_size]
         
+        if debug_mode:
+            console.log(f"Debug: Crop size: {crop_size}, cropped shape: {cropped.shape}")
+        
         # Estimate amplitude from intensity
         amplitude = np.sqrt(cropped)
+        
+        if debug_mode:
+            console.log(f"Debug: Amplitude shape: {amplitude.shape}")
         
         # Apply Fresnel propagation
         propagated = fresnel_propagator(amplitude, current_pixelsize, current_wavelength, current_dz)
         
+        if debug_mode:
+            console.log(f"Debug: Propagated shape: {propagated.shape}")
+        
         # Calculate intensity
         intensity = abssqr(propagated)
+        
+        if debug_mode:
+            console.log(f"Debug: Intensity shape: {intensity.shape}")
         
         # Normalize for display
         intensity = (intensity - np.min(intensity)) / (np.max(intensity) - np.min(intensity))
         intensity = (intensity * 255).astype(np.uint8)
         
-        # Resize back to original canvas size
-        if crop_size != width or crop_size != height:
-            # Simple repeat for upsampling (can be improved with proper interpolation)
-            scale_x = width // crop_size
-            scale_y = height // crop_size
-            intensity = np.repeat(np.repeat(intensity, scale_y, axis=0), scale_x, axis=1)
+        if debug_mode:
+            console.log(f"Debug: Normalized intensity shape: {intensity.shape}")
+        
+        # Resize back to original canvas size using proper interpolation
+        if intensity.shape[0] != height or intensity.shape[1] != width:
+            if debug_mode:
+                console.log(f"Debug: Resizing from {intensity.shape} to ({height}, {width})")
             
-            # Ensure exact size match
-            intensity = intensity[:height, :width]
+            # Use a simple but robust interpolation approach
+            # Calculate scaling factors
+            scale_y = height / intensity.shape[0]
+            scale_x = width / intensity.shape[1]
+            
+            if debug_mode:
+                console.log(f"Debug: Scale factors - y: {scale_y}, x: {scale_x}")
+            
+            # Create coordinate grids for interpolation
+            y_old = np.arange(intensity.shape[0])
+            x_old = np.arange(intensity.shape[1])
+            y_new = np.linspace(0, intensity.shape[0] - 1, height)
+            x_new = np.linspace(0, intensity.shape[1] - 1, width)
+            
+            # Simple nearest neighbor interpolation
+            y_indices = np.round(y_new).astype(int)
+            x_indices = np.round(x_new).astype(int)
+            
+            # Ensure indices are within bounds
+            y_indices = np.clip(y_indices, 0, intensity.shape[0] - 1)
+            x_indices = np.clip(x_indices, 0, intensity.shape[1] - 1)
+            
+            # Create meshgrid and resize
+            Y, X = np.meshgrid(y_indices, x_indices, indexing='ij')
+            intensity = intensity[Y, X]
+            
+            if debug_mode:
+                console.log(f"Debug: Resized intensity shape: {intensity.shape}")
         
         # Convert back to RGBA
         result = np.zeros((height, width, 4), dtype=np.uint8)
@@ -103,10 +152,18 @@ def process_image_data(image_data, width, height):
         result[:, :, 2] = intensity  # B
         result[:, :, 3] = 255        # A
         
+        if debug_mode:
+            console.log(f"Debug: Final result shape: {result.shape}")
+        
         return result.flatten()
         
     except Exception as e:
         console.log(f"Processing error: {e}")
+        if debug_mode:
+            console.log(f"Debug: Exception type: {type(e).__name__}")
+            # Try to get more detailed error information
+            import traceback
+            console.log(f"Debug: Full traceback: {traceback.format_exc()}")
         return None
 
 def process_frame_from_snapshot():
@@ -213,6 +270,21 @@ def toggle_processing(event=None):  # Fixed: added event parameter
         document.getElementById('processing-enabled').textContent = 'Disabled'
         document.getElementById('status').textContent = 'Processing stopped'
 
+def toggle_debug_mode(event=None):
+    """Toggle debug mode on/off"""
+    global debug_mode
+    
+    debug_mode = not debug_mode
+    
+    if debug_mode:
+        document.getElementById('toggleDebug').textContent = 'Disable Debug'
+        document.getElementById('debug-status').textContent = 'Enabled'
+        console.log("Debug mode enabled - detailed logging active")
+    else:
+        document.getElementById('toggleDebug').textContent = 'Enable Debug'
+        document.getElementById('debug-status').textContent = 'Disabled'
+        console.log("Debug mode disabled")
+
 def update_parameters(event=None):
     """Update processing parameters from sliders"""
     global current_wavelength, current_pixelsize, current_dz
@@ -235,6 +307,7 @@ def update_parameters(event=None):
 # Set up event listeners
 document.getElementById('toggleProcessing').onclick = create_proxy(toggle_processing)
 document.getElementById('processFrame').onclick = create_proxy(update_processed_canvas)
+document.getElementById('toggleDebug').onclick = create_proxy(toggle_debug_mode)
 
 # Parameter slider listeners
 document.getElementById('wavelength').oninput = create_proxy(update_parameters)
