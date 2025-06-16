@@ -17,6 +17,8 @@ import cv2
 import time
 import uvicorn
 import os
+import subprocess
+import sys
 
 # Mock picamera2 for development/testing environments
 try:
@@ -86,6 +88,55 @@ if not os.path.exists(static_dir):
     os.makedirs(static_dir)
     
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+# SSL certificate generation function
+def generate_ssl_certificates_if_needed():
+    """Generate self-signed SSL certificates if they don't exist"""
+    cert_dir = "ssl_certs"
+    keyfile = os.path.join(cert_dir, "server.key")
+    certfile = os.path.join(cert_dir, "server.crt")
+    
+    # Check if certificates already exist
+    if os.path.exists(keyfile) and os.path.exists(certfile):
+        print(f"SSL certificates found in {cert_dir}/")
+        return keyfile, certfile
+    
+    try:
+        # Create certificate directory if it doesn't exist
+        if not os.path.exists(cert_dir):
+            os.makedirs(cert_dir)
+        
+        print("Generating SSL certificates for HTTPS support...")
+        
+        # Generate private key
+        print("  Generating private key...")
+        subprocess.run([
+            "openssl", "genrsa", "-out", keyfile, "2048"
+        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        
+        # Generate certificate
+        print("  Generating self-signed certificate...")
+        subprocess.run([
+            "openssl", "req", "-new", "-x509", "-key", keyfile,
+            "-out", certfile, "-days", "365", "-subj",
+            "/C=US/ST=Test/L=Test/O=HoloBox/CN=localhost"
+        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        
+        print(f"  SSL certificates generated successfully!")
+        print(f"  Key file: {keyfile}")
+        print(f"  Certificate file: {certfile}")
+        print("  Note: Browsers will show a security warning for self-signed certificates.")
+        
+        return keyfile, certfile
+        
+    except subprocess.CalledProcessError as e:
+        print(f"Warning: Could not generate SSL certificates: {e}")
+        print("Make sure OpenSSL is installed on your system.")
+        return None, None
+    except FileNotFoundError:
+        print("Warning: OpenSSL not found. SSL certificate generation skipped.")
+        print("Install OpenSSL to enable automatic HTTPS support.")
+        return None, None
 
 # Models
 class CameraSettings(BaseModel):
@@ -187,18 +238,42 @@ if __name__ == "__main__":
     parser.add_argument("--port", default=8000, type=int, help="Port to bind to")
     parser.add_argument("--ssl-keyfile", help="SSL private key file")
     parser.add_argument("--ssl-certfile", help="SSL certificate file")
+    parser.add_argument("--no-ssl", action="store_true", help="Disable automatic SSL certificate generation")
     args = parser.parse_args()
     
-    # Configure SSL if certificates provided
+    # Configure SSL
     ssl_kwargs = {}
+    
+    # If SSL files are explicitly provided, use them
     if args.ssl_keyfile and args.ssl_certfile:
         ssl_kwargs = {
             "ssl_keyfile": args.ssl_keyfile,
             "ssl_certfile": args.ssl_certfile
         }
         print(f"Starting server with SSL on https://{args.host}:{args.port}")
+        print(f"Using provided certificates: {args.ssl_keyfile}, {args.ssl_certfile}")
+    
+    # If no SSL files provided and SSL not disabled, try to auto-generate
+    elif not args.no_ssl:
+        auto_keyfile, auto_certfile = generate_ssl_certificates_if_needed()
+        if auto_keyfile and auto_certfile:
+            ssl_kwargs = {
+                "ssl_keyfile": auto_keyfile,
+                "ssl_certfile": auto_certfile
+            }
+            print(f"Starting server with auto-generated SSL on https://{args.host}:{args.port}")
+        else:
+            print(f"Starting server without SSL on http://{args.host}:{args.port}")
+            print("SSL certificate generation failed. Running in HTTP mode.")
+    
+    # SSL explicitly disabled
     else:
-        print(f"Starting server on http://{args.host}:{args.port}")
-        print("For SSL support, use --ssl-keyfile and --ssl-certfile arguments")
+        print(f"Starting server without SSL on http://{args.host}:{args.port}")
+        print("SSL disabled by --no-ssl flag")
+    
+    # Show SSL usage information
+    if not ssl_kwargs:
+        print("For manual SSL support, use --ssl-keyfile and --ssl-certfile arguments")
+        print("To disable automatic SSL generation, use --no-ssl")
     
     uvicorn.run(app, host=args.host, port=args.port, **ssl_kwargs)
