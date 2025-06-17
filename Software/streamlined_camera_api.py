@@ -92,6 +92,10 @@ class CameraSettings(BaseModel):
     exposure_us: int | None = None   # microseconds
     gain: float | None = None        # analogue gain
 
+class WiFiConfig(BaseModel):
+    ssid: str
+    password: str | None = None
+
 # Utility functions
 def _capture() -> np.ndarray:
     """Capture a frame from the camera"""
@@ -178,6 +182,140 @@ def stats():
         "max": int(np.max(gray)),
         "mean": float(np.mean(gray)),
     }
+
+# WiFi Management Endpoints
+@app.get("/wifi/status", summary="Get WiFi status")
+def get_wifi_status():
+    """Get current WiFi connection status and available networks"""
+    import subprocess
+    
+    try:
+        # Get current connection
+        current = subprocess.run(["iwgetid", "-r"], capture_output=True, text=True)
+        connected_ssid = current.stdout.strip() if current.returncode == 0 else None
+        
+        # Get IP address
+        ip_result = subprocess.run(["ip", "addr", "show", "wlan0"], capture_output=True, text=True)
+        ip_address = None
+        if ip_result.returncode == 0:
+            for line in ip_result.stdout.split('\n'):
+                if 'inet ' in line and not '127.0.0.1' in line:
+                    ip_address = line.strip().split()[1].split('/')[0]
+                    break
+        
+        # Check if running as access point
+        hostapd_status = subprocess.run(["systemctl", "is-active", "hostapd"], capture_output=True, text=True)
+        is_access_point = hostapd_status.stdout.strip() == "active"
+        
+        return {
+            "connected_ssid": connected_ssid,
+            "ip_address": ip_address,
+            "is_access_point": is_access_point,
+            "interface": "wlan0"
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/wifi/scan", summary="Scan for available networks")
+def scan_wifi():
+    """Scan for available WiFi networks"""
+    import subprocess
+    
+    try:
+        # Trigger scan
+        subprocess.run(["sudo", "iwlist", "wlan0", "scan"], capture_output=True)
+        
+        # Get scan results
+        result = subprocess.run(["sudo", "iwlist", "wlan0", "scan"], capture_output=True, text=True)
+        
+        networks = []
+        current_network = {}
+        
+        for line in result.stdout.split('\n'):
+            line = line.strip()
+            if 'Cell ' in line and 'Address:' in line:
+                if current_network:
+                    networks.append(current_network)
+                current_network = {"bssid": line.split('Address: ')[1]}
+            elif 'ESSID:' in line:
+                essid = line.split('ESSID:')[1].strip('"')
+                if essid:
+                    current_network["ssid"] = essid
+            elif 'Quality=' in line:
+                try:
+                    quality = line.split('Quality=')[1].split(' ')[0]
+                    current_network["quality"] = quality
+                except:
+                    pass
+            elif 'Encryption key:' in line:
+                encrypted = 'on' in line
+                current_network["encrypted"] = encrypted
+        
+        if current_network:
+            networks.append(current_network)
+        
+        # Remove duplicates and filter out networks without SSID
+        unique_networks = []
+        seen_ssids = set()
+        for network in networks:
+            if 'ssid' in network and network['ssid'] not in seen_ssids:
+                seen_ssids.add(network['ssid'])
+                unique_networks.append(network)
+        
+        return {"networks": unique_networks}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/wifi/connect", summary="Connect to WiFi network")
+def connect_wifi(config: WiFiConfig):
+    """Connect to a WiFi network (switches from AP mode to client mode)"""
+    import subprocess
+    import os
+    
+    try:
+        # Call the WiFi client setup script
+        script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "setup_wifi_client.sh")
+        
+        if config.password:
+            cmd = [script_path, "--ssid", config.ssid, "--password", config.password]
+        else:
+            return {"error": "Password is required"}
+        
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            return {
+                "status": "success", 
+                "message": f"WiFi configuration updated for {config.ssid}. Reboot required.",
+                "ssid": config.ssid
+            }
+        else:
+            return {"error": f"Configuration failed: {result.stderr}"}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/wifi/access_point", summary="Enable Access Point mode")
+def enable_access_point():
+    """Enable Access Point mode"""
+    import subprocess
+    import os
+    
+    try:
+        # Call the access point setup script
+        script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "setup_access_point.sh")
+        
+        result = subprocess.run([script_path], capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            return {
+                "status": "success", 
+                "message": "Access Point configured. Reboot required.",
+                "output": result.stdout
+            }
+        else:
+            return {"error": f"Access Point setup failed: {result.stderr}"}
+    except Exception as e:
+        return {"error": str(e)}
 
 if __name__ == "__main__":
     import argparse

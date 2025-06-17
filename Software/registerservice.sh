@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
-# register and start /home/pi/startcamera2.py as a systemd service
+# register and start HoloBox camera API as a systemd service
 
-SERVICE=startcamera2.service
+SERVICE=holobox-camera.service
 
 sudo bash -c "cat >/etc/systemd/system/$SERVICE" <<'UNIT'
 [Unit]
-Description=Pi Camera Stream
+Description=HoloBox Camera API Server
 After=network.target
 
 [Service]
 Type=simple
 User=pi
-WorkingDirectory=/home/pi
-ExecStart=/usr/bin/python /home/pi/startcamera2.py
+WorkingDirectory=/opt/holobox/Software
+ExecStart=/usr/bin/python3 /opt/holobox/Software/streamlined_camera_api.py --host 0.0.0.0 --port 8000
 Restart=on-failure
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
