@@ -105,6 +105,63 @@
     </div>
   </div>
 
+  <!-- WiFi Management -->
+  <div class="controls-panel">
+    <h6>WiFi Management</h6>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h6 class="mb-0">Connection Status</h6>
+          </div>
+          <div class="card-body">
+            <div id="wifi-status">
+              <small class="text-muted">Loading...</small>
+            </div>
+            <button id="refreshStatus" class="btn btn-sm btn-outline-primary mt-2">Refresh Status</button>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h6 class="mb-0">Network Configuration</h6>
+          </div>
+          <div class="card-body">
+            <button id="scanNetworks" class="btn btn-sm btn-primary mb-2">Scan Networks</button>
+            <button id="enableAP" class="btn btn-sm btn-warning mb-2">Enable Access Point</button>
+            <div id="network-list" class="mt-2" style="max-height: 200px; overflow-y: auto;">
+              <small class="text-muted">Click "Scan Networks" to see available WiFi networks</small>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="row g-3 mt-2">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header">
+            <h6 class="mb-0">Connect to Network</h6>
+          </div>
+          <div class="card-body">
+            <div class="row g-2">
+              <div class="col-md-4">
+                <input type="text" id="wifi-ssid" class="form-control" placeholder="Network Name (SSID)">
+              </div>
+              <div class="col-md-4">
+                <input type="password" id="wifi-password" class="form-control" placeholder="Password">
+              </div>
+              <div class="col-md-4">
+                <button id="connectWifi" class="btn btn-success w-100">Connect</button>
+              </div>
+            </div>
+            <small class="text-muted">Note: Connecting to a network will require a reboot to take effect.</small>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Status Information -->
   <div class="processing-status">
     <strong>Status:</strong> <span id="status">Ready</span><br>
