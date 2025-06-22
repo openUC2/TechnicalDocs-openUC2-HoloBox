@@ -1,0 +1,9 @@
+{
+  "LiteBuildConfig": {
+    "federated_extensions": ["@jupyterlite/xeus-python-kernel"],
+    "XeusPythonEnv": {
+      "packages": ["numpy", "matplotlib", "scipy", "ipywidgets", "pillow"],
+      "piplite_urls": ["https://cdn.jsdelivr.net/pyodide/"]
+    }
+  }
+}

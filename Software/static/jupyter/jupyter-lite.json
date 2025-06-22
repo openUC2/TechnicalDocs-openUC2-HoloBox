@@ -1,0 +1,32 @@
+{
+  "LiteBuildConfig": {
+    "XeusPythonEnv": {
+      "packages": [
+        "numpy",
+        "matplotlib",
+        "scipy",
+        "ipywidgets",
+        "pillow"
+      ],
+      "piplite_urls": [
+        "https://cdn.jsdelivr.net/pyodide/"
+      ]
+    },
+    "federated_extensions": [
+      "@jupyterlite/xeus-python-kernel"
+    ]
+  },
+  "jupyter-config-data": {
+    "appName": "JupyterLite",
+    "appUrl": "./lab",
+    "appVersion": "0.6.2",
+    "baseUrl": "./",
+    "defaultKernelName": "python",
+    "faviconUrl": "./lab/favicon.ico",
+    "federated_extensions": [],
+    "fullLabextensionsUrl": "./extensions",
+    "fullStaticUrl": "./build",
+    "licensesUrl": "./lab/api/licenses"
+  },
+  "jupyter-lite-schema-version": 0
+}

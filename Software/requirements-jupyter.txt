@@ -1,0 +1,8 @@
+jupyterlite-core>=0.2.0
+jupyterlite-xeus-python>=1.0.0
+numpy
+matplotlib
+scipy
+ipywidgets
+pillow
+requests

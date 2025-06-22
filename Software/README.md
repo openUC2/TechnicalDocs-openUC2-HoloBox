@@ -1,53 +1,144 @@
-# HoloBox Camera Streaming and Processing
+# HoloBox Software Documentation
 
-This reorganized software provides a streamlined FastAPI backend for camera streaming with real-time hologram processing using PyScript.
+This directory contains the software components for the HoloBox system, including camera interface, hologram processing, and xeus-lite JupyterLite notebook.
 
-## Features
+## Quick Start
 
-### FastAPI Backend (`streamlined_camera_api.py`)
-- **MJPEG Streaming**: Real-time camera feed at `/stream`
-- **JPEG Capture**: Single frame capture at `/snapshot`
-- **Camera Control**: Set exposure time and gain via `/settings`
-- **Static File Serving**: Hosts the web interface at `/static/`
-- **Mock Camera Support**: Works without actual camera hardware for development
+### 1. xeus-lite JupyterLite Notebook
 
-### Enhanced Web Interface (`static/index.html`)
-- **Real-time Streaming**: Display live camera feed
-- **PyScript Integration**: Client-side Python processing
-- **Fresnel Propagation**: Real-time hologram reconstruction
-- **Interactive Controls**: Adjustable parameters (wavelength, pixel size, distance)
-- **Dual Display**: Original stream and processed hologram side-by-side
+Build and run the xeus-lite Jupyter notebook with comprehensive hologram processing:
 
-## Usage
+```bash
+cd Software
+python build_xeus_lite.py
+python streamlined_camera_api.py
+```
 
-### 1. Start the API Server
+Open browser: `http://localhost:8000/static/notebook.html`
 
-#### Basic HTTP Server
+### 2. Camera Interface
+
+Start the camera system:
+
+```bash
+python streamlined_camera_api.py
+```
+
+Access web interface: `http://localhost:8000/static/index.html`
+
+## Components
+
+### xeus-lite JupyterLite Notebook
+
+- **Template**: Based on [xeus-lite-demo](https://github.com/jupyterlite/xeus-lite-demo)
+- **Build Tool**: `build_xeus_lite.py` - CLI tool for building JupyterLite with xeus-python
+- **Output**: Complete offline notebook in `static/jupyter/`
+- **Features**: 
+  - xeus-python kernel for full Python compatibility
+  - Interactive hologram processing with widgets
+  - Real-time camera integration
+  - Advanced focus optimization algorithms
+  - Complete offline operation
+- **Documentation**: See `XEUS_LITE_README.md` for detailed information
+- **Deployment**: Automatic deployment to `youseetoo.github.io/jupyter` via GitHub Actions
+
+### Camera API
+
+- **File**: `streamlined_camera_api.py` - FastAPI server for camera control
+- **Features**: Live capture, parameter control, SSL support
+- **Interface**: Web-based UI with real-time preview
+
+## Detailed Usage
+
+### xeus-lite Jupyter Notebook
+
+The notebook provides a complete Python environment running in the browser with these features:
+
+1. **Interactive Controls**: Real-time parameter adjustment via widgets
+2. **Camera Integration**: Direct API calls to capture live holograms
+3. **Advanced Processing**: Batch analysis, autofocus, and multi-distance reconstruction
+4. **Visualization**: Multi-panel displays with various colormaps
+5. **Export Functions**: Save results and parameters for analysis
+
+### Camera System
+
+#### Start the API Server
+
+**Basic HTTP Server**:
 ```bash
 cd Software
 python streamlined_camera_api.py
 ```
 Server runs on `http://localhost:8000`
 
-#### HTTPS Server (for GitHub Pages integration)
-First generate SSL certificates:
+**HTTPS Server** (for GitHub Pages integration):
 ```bash
-python generate_ssl_cert.py
-```
-
-Then start with SSL:
-```bash
+python generate_ssl_cert.py  # Generate SSL certificates
 python streamlined_camera_api.py --ssl-keyfile ssl_certs/server.key --ssl-certfile ssl_certs/server.crt
 ```
 Server runs on `https://localhost:8000`
 
-**Note**: Self-signed certificates will show browser warnings. This is normal for development/testing.
+#### API Endpoints
+- `GET /`: Server status
+- `GET /stream`: MJPEG video stream
+- `GET /snapshot`: Single JPEG image
+- `POST /settings`: Set camera parameters
+- `GET /settings`: Get current parameters
+- `GET /stats`: Image statistics
 
-### 2. Access Web Interface
-- HTTP: Navigate to `http://localhost:8000/static/`
-- HTTPS: Navigate to `https://localhost:8000/static/`
+#### Cross-Origin Access (CORS)
+The server supports CORS, allowing access from GitHub Pages and other domains.
 
-### 3. Cross-Origin Access (CORS)
+## GitHub Actions Deployment
+
+The notebook is automatically deployed to `https://youseetoo.github.io/jupyter` when changes are pushed to the main branch. The workflow:
+
+1. Installs JupyterLite dependencies
+2. Builds the complete site with xeus-python kernel
+3. Deploys to the specified GitHub Pages repository
+
+## Dependencies
+
+### Jupyter Notebook
+- `jupyterlite-core>=0.2.0`
+- `jupyterlite-xeus-python>=1.0.0`
+- `numpy`, `matplotlib`, `scipy`
+- `ipywidgets`, `pillow`, `requests`
+
+### Camera API
+- `fastapi`: Web API framework
+- `uvicorn`: ASGI server
+- `picamera2`: Raspberry Pi camera interface
+- `numpy`: Numerical computations
+- `opencv-python`: Image processing
+
+## Development & Testing
+
+Run validation scripts:
+```bash
+# Test camera API
+python test_implementation.py
+
+# Test Jupyter build
+python test_jupyterlite_build.py
+```
+
+## File Structure
+
+```
+Software/
+├── content/                          # Notebook content
+│   └── hologram_processing.ipynb     # Main processing notebook
+├── static/                          # Web assets
+│   ├── jupyter/                     # Built JupyterLite site
+│   ├── index.html                   # Camera interface
+│   └── notebook.html               # Notebook entry point
+├── build_xeus_lite.py              # Build script for xeus-lite
+├── streamlined_camera_api.py       # Camera API server
+├── XEUS_LITE_README.md            # Detailed notebook documentation
+└── .github/workflows/
+    └── deploy-jupyter.yml          # GitHub Actions deployment
+```
 The server now supports CORS (Cross-Origin Resource Sharing), allowing access from:
 - Static file servers (like VS Code Live Server)
 - GitHub Pages
