@@ -18,6 +18,13 @@ This reorganized software provides a streamlined FastAPI backend for camera stre
 - **Interactive Controls**: Adjustable parameters (wavelength, pixel size, distance)
 - **Dual Display**: Original stream and processed hologram side-by-side
 
+### Educational Jupyter Notebook (`hologram_education_notebook.ipynb`)
+- **Comprehensive Learning**: Step-by-step holography theory and implementation
+- **Interactive Demonstrations**: Live parameter exploration with widgets
+- **Live Camera Integration**: Connect to HoloBox API for real data processing
+- **Hands-on Exercises**: Guided experiments for deeper understanding
+- **Best Practices Guide**: Optimization tips and troubleshooting
+
 ## Usage
 
 ### 1. Start the API Server
@@ -47,7 +54,18 @@ Server runs on `https://localhost:8000`
 - HTTP: Navigate to `http://localhost:8000/static/`
 - HTTPS: Navigate to `https://localhost:8000/static/`
 
-### 3. Cross-Origin Access (CORS)
+### 3. Use Educational Jupyter Notebook
+For educational purposes and detailed learning:
+```bash
+# Install notebook dependencies
+pip install -r notebook_requirements.txt
+
+# Start Jupyter Notebook
+jupyter notebook hologram_education_notebook.ipynb
+```
+See `NOTEBOOK_README.md` for detailed instructions.
+
+### 4. Cross-Origin Access (CORS)
 The server now supports CORS (Cross-Origin Resource Sharing), allowing access from:
 - Static file servers (like VS Code Live Server)
 - GitHub Pages
@@ -55,14 +73,14 @@ The server now supports CORS (Cross-Origin Resource Sharing), allowing access fr
 
 In the web interface, set the API URL to point to your server (e.g., `https://localhost:8000`).
 
-### 4. Camera Controls
+### 5. Camera Controls
 - **Start Stream**: Begin camera streaming
 - **Stop Stream**: Stop camera streaming  
 - **Set Exposure**: Adjust camera exposure time (microseconds)
 - **Set Gain**: Adjust analogue gain
 - **Capture**: Take single JPEG snapshot
 
-### 5. Hologram Processing
+### 6. Hologram Processing
 - **Wavelength**: Adjust laser wavelength (380-700 nm)
 - **Pixel Size**: Set camera pixel size (0.5-5.0 µm)
 - **Distance**: Set propagation distance (0.1-20.0 mm)
@@ -88,12 +106,38 @@ The implementation uses the angular spectrum method:
 - `GET /stats`: Image statistics
 
 ### Dependencies
+
+#### Core API Server
 - `fastapi`: Web API framework
 - `uvicorn`: ASGI server
 - `picamera2`: Raspberry Pi camera interface
 - `numpy`: Numerical computations
 - `opencv-python`: Image processing
 - `pydantic`: Data validation
+
+#### Educational Notebook
+- `jupyter`: Interactive computing environment
+- `ipywidgets`: Interactive widgets for notebooks
+- `matplotlib`: Plotting and visualization
+- `requests`: HTTP client library
+- `Pillow`: Image processing library
+
+## File Structure
+
+```
+Software/
+├── streamlined_camera_api.py          # Main FastAPI server
+├── hologram_education_notebook.ipynb  # Educational Jupyter notebook
+├── static/                            # Web interface files
+│   ├── index.html                     # PyScript-based web interface
+│   ├── hologram_processing.py         # Client-side processing code
+│   └── camera_controls.js             # JavaScript camera controls
+├── requirements.txt                   # API server dependencies
+├── notebook_requirements.txt          # Notebook dependencies  
+├── validate_notebook.py               # Notebook validation script
+├── README.md                         # This file
+└── NOTEBOOK_README.md                # Detailed notebook documentation
+```
 
 ## Development Notes
 
@@ -105,6 +149,7 @@ The implementation uses the angular spectrum method:
 
 ## Testing
 
+### API Server Testing
 Run the validation script:
 ```bash
 python test_implementation.py
@@ -114,3 +159,30 @@ This tests:
 - Fresnel propagation mathematics
 - API endpoint structure  
 - HTML interface elements
+
+### Notebook Testing
+Validate the notebook functionality:
+```bash
+python validate_notebook.py
+```
+
+This tests:
+- Required dependencies
+- Core hologram processing algorithms
+- Synthetic hologram generation
+- API connection functionality
+
+## Educational Use
+
+The Jupyter notebook is designed for:
+- **Physics Education**: Understanding wave optics and diffraction
+- **Research Training**: Learning digital holography techniques  
+- **Engineering Courses**: Optical system design and analysis
+- **Self-directed Learning**: Exploring holography interactively
+
+Key educational features:
+- Step-by-step theory explanations
+- Interactive parameter exploration
+- Real-time processing with live camera
+- Hands-on exercises and experiments
+- Best practices and optimization guides
