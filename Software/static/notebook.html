@@ -274,10 +274,22 @@ print("Use the 'Process Hologram' button to run the demo")</code></pre>
         <div class="col-md-6">
           <h5>Original Hologram</h5>
           <canvas id="originalCanvas" width="256" height="256" style="border: 1px solid #ccc; max-width: 100%;"></canvas>
+          <div id="originalInfo" class="small text-muted mt-2"></div>
         </div>
         <div class="col-md-6">
           <h5>Reconstructed Image</h5>
           <canvas id="reconstructedCanvas" width="256" height="256" style="border: 1px solid #ccc; max-width: 100%;"></canvas>
+          <div id="reconstructedInfo" class="small text-muted mt-2"></div>
+        </div>
+      </div>
+      <div class="row mt-3">
+        <div class="col-md-6">
+          <h5>Phase Information</h5>
+          <canvas id="phaseCanvas" width="256" height="256" style="border: 1px solid #ccc; max-width: 100%;"></canvas>
+        </div>
+        <div class="col-md-6">
+          <h5>Amplitude Information</h5>
+          <canvas id="amplitudeCanvas" width="256" height="256" style="border: 1px solid #ccc; max-width: 100%;"></canvas>
         </div>
       </div>
       <div id="processingResults" class="mt-3">
@@ -309,14 +321,23 @@ print("Use the 'Process Hologram' button to run the demo")</code></pre>
 <!-- PyScript Configuration -->
 <py-config>
   packages = ["numpy", "matplotlib"]
+  
+  [[fetch]]
+  files = ["./hologram_processing_lib.py"]
 </py-config>
 
 <!-- PyScript for notebook functionality -->
 <py-script>
+# Import the comprehensive hologram processing library
+from hologram_processing_lib import *
+
 # Global variables for notebook state
 notebook_state = {
     'cells_run': set(),
-    'variables': {}
+    'variables': {},
+    'processor': None,
+    'current_hologram': None,
+    'current_results': None
 }
 
 def run_cell_2():
@@ -333,8 +354,12 @@ def run_cell_2():
         import matplotlib
         matplotlib.use('Agg')  # Use Agg backend for web
         
+        # Create hologram processor instance
+        notebook_state['processor'] = HologramProcessor()
+        
         output = """✅ Libraries imported successfully
 ✅ Matplotlib configured for web display
+✅ HologramProcessor initialized
 ✅ Ready for hologram processing"""
         
         document.getElementById('cell2-output').innerHTML = f"<pre>{output}</pre>"
@@ -346,35 +371,14 @@ def run_cell_2():
 def run_cell_3():
     """Execute cell 3 - core functions"""
     try:
-        # Define core functions
-        exec("""
-def abssqr(x):
-    return np.real(x * np.conj(x))
-
-def FT(x):
-    return np.fft.fftshift(np.fft.fft2(x))
-
-def iFT(x):
-    return np.fft.ifft2(np.fft.ifftshift(x))
-
-def fresnel_propagator(E0, ps, lambda0, z):
-    upsample_scale = 1
-    n = upsample_scale * E0.shape[1]
-    grid_size = ps * n
-    
-    fx = np.linspace(-(n-1)/2*(1/grid_size), (n-1)/2*(1/grid_size), n)
-    fy = np.linspace(-(n-1)/2*(1/grid_size), (n-1)/2*(1/grid_size), n)
-    Fx, Fy = np.meshgrid(fx, fy)
-    
-    H = np.exp(1j*(2 * np.pi / lambda0) * z) * np.exp(1j * np.pi * lambda0 * z * (Fx**2 + Fy**2))
-    
-    Ef = iFT(FT(E0) * H)
-    
-    return Ef
-""", globals())
-        
-        output = """✅ Core functions defined
-Functions available: abssqr, FT, iFT, fresnel_propagator"""
+        output = """✅ Core functions loaded from hologram_processing_lib.py
+Available functions:
+  - HologramProcessor class with full functionality
+  - fresnel_propagator(): Fresnel propagation
+  - reconstruct_hologram(): Complete reconstruction pipeline
+  - find_optimal_distance(): Auto-focus functionality
+  - create_sample_hologram(): Generate test holograms
+  - preprocess_hologram(): Image preprocessing"""
         
         document.getElementById('cell3-output').innerHTML = f"<pre>{output}</pre>"
         notebook_state['cells_run'].add(3)
@@ -385,44 +389,18 @@ Functions available: abssqr, FT, iFT, fresnel_propagator"""
 def run_cell_4():
     """Execute cell 4 - demo functions"""
     try:
-        # Define demo functions
-        exec("""
-def create_sample_hologram(size=256):
-    x = np.linspace(-1, 1, size)
-    y = np.linspace(-1, 1, size)
-    X, Y = np.meshgrid(x, y)
-    
-    obj1 = np.exp(-((X-0.3)**2 + (Y-0.2)**2) / 0.01)
-    obj2 = np.exp(-((X+0.2)**2 + (Y-0.3)**2) / 0.02)
-    
-    hologram = 1 + 0.5 * np.cos(10 * np.pi * X) * obj1 + 0.3 * np.cos(15 * np.pi * Y) * obj2
-    hologram += 0.1 * np.random.random((size, size))
-    
-    return hologram
-
-def process_and_display_hologram():
-    wavelength = float(document.getElementById('wavelength').value) * 1e-9
-    pixelsize = float(document.getElementById('pixelsize').value) * 1e-6
-    distance = float(document.getElementById('distance').value) * 1e-3
-    
-    hologram = create_sample_hologram()
-    reconstructed = fresnel_propagator(hologram.astype(complex), pixelsize, wavelength, distance)
-    intensity = abssqr(reconstructed)
-    
-    result = f'''Processed hologram with:
-  Wavelength: {wavelength*1e9:.0f} nm
-  Pixel size: {pixelsize*1e6:.1f} µm
-  Distance: {distance*1e3:.1f} mm
-  Result shape: {intensity.shape}
-  Intensity range: {intensity.min():.3f} - {intensity.max():.3f}'''
-    
-    document.getElementById('processingResults').innerHTML = f"<pre>{result}</pre>"
-    
-    return hologram, intensity
-""", globals())
+        # Create sample hologram
+        processor = notebook_state.get('processor') or HologramProcessor()
+        sample_hologram = processor.create_sample_hologram(256, 'circles')
+        notebook_state['current_hologram'] = sample_hologram
+        
+        # Display sample hologram
+        display_array_on_canvas(sample_hologram, 'originalCanvas')
+        document.getElementById('originalInfo').innerHTML = f"Sample hologram: {sample_hologram.shape}, range: {sample_hologram.min():.3f} - {sample_hologram.max():.3f}"
         
         output = """✅ Demo functions ready
-Use the 'Process Hologram' button to run the demo"""
+✅ Sample hologram created and displayed
+✅ Use the 'Process Hologram' button to run reconstruction"""
         
         document.getElementById('cell4-output').innerHTML = f"<pre>{output}</pre>"
         notebook_state['cells_run'].add(4)
@@ -430,11 +408,132 @@ Use the 'Process Hologram' button to run the demo"""
     except Exception as e:
         document.getElementById('cell4-output').innerHTML = f"<pre style='color: red;'>❌ Error: {str(e)}</pre>"
 
+def display_array_on_canvas(array, canvas_id, colormap='gray'):
+    """Display numpy array on HTML canvas"""
+    try:
+        canvas = document.getElementById(canvas_id)
+        ctx = canvas.getContext('2d')
+        
+        # Normalize array to [0, 255]
+        normalized = ((array - array.min()) / (array.max() - array.min()) * 255).astype(np.uint8)
+        
+        # Create image data
+        height, width = normalized.shape
+        canvas.width = width
+        canvas.height = height
+        
+        # Convert to RGBA
+        if colormap == 'gray':
+            rgba_data = np.zeros((height, width, 4), dtype=np.uint8)
+            rgba_data[:, :, 0] = normalized  # R
+            rgba_data[:, :, 1] = normalized  # G
+            rgba_data[:, :, 2] = normalized  # B
+            rgba_data[:, :, 3] = 255         # A
+        elif colormap == 'phase':
+            # Phase colormap (HSV-like)
+            rgba_data = np.zeros((height, width, 4), dtype=np.uint8)
+            normalized_phase = ((array + np.pi) / (2 * np.pi) * 255).astype(np.uint8)
+            rgba_data[:, :, 0] = normalized_phase  # R (hue)
+            rgba_data[:, :, 1] = 255               # G (saturation)
+            rgba_data[:, :, 2] = 200               # B (value)
+            rgba_data[:, :, 3] = 255               # A
+        else:
+            # Default gray
+            rgba_data = np.zeros((height, width, 4), dtype=np.uint8)
+            rgba_data[:, :, 0] = normalized
+            rgba_data[:, :, 1] = normalized
+            rgba_data[:, :, 2] = normalized
+            rgba_data[:, :, 3] = 255
+        
+        # Flatten and create ImageData
+        flat_data = rgba_data.flatten()
+        uint8_data = Uint8ClampedArray.new(flat_data.tolist())
+        image_data = ImageData.new(uint8_data, width, height)
+        
+        # Draw to canvas
+        ctx.putImageData(image_data, 0, 0)
+        
+    except Exception as e:
+        console.log(f"Error displaying array: {e}")
+
+def process_hologram_demo():
+    """Process hologram with current parameters and display results"""
+    try:
+        if 'processor' not in notebook_state:
+            notebook_state['processor'] = HologramProcessor()
+        
+        processor = notebook_state['processor']
+        
+        # Get current parameters
+        wavelength = float(document.getElementById('wavelength').value) * 1e-9  # nm to m
+        pixelsize = float(document.getElementById('pixelsize').value) * 1e-6   # µm to m
+        distance = float(document.getElementById('distance').value) * 1e-3     # mm to m
+        
+        # Update processor parameters
+        processor.wavelength = wavelength
+        processor.pixel_size = pixelsize
+        
+        # Get or create hologram
+        if notebook_state['current_hologram'] is not None:
+            hologram = notebook_state['current_hologram']
+        else:
+            hologram = processor.create_sample_hologram(256)
+            notebook_state['current_hologram'] = hologram
+            display_array_on_canvas(hologram, 'originalCanvas')
+        
+        # Process hologram
+        results = processor.reconstruct_hologram(hologram, distance)
+        notebook_state['current_results'] = results
+        
+        # Display results
+        display_array_on_canvas(results['intensity'], 'reconstructedCanvas')
+        display_array_on_canvas(results['phase'], 'phaseCanvas', 'phase')
+        display_array_on_canvas(results['amplitude'], 'amplitudeCanvas')
+        
+        # Update info
+        document.getElementById('reconstructedInfo').innerHTML = f"Intensity: {results['intensity'].shape}, range: {results['intensity'].min():.3f} - {results['intensity'].max():.3f}"
+        
+        # Display processing info
+        result_text = f"""Processed hologram with:
+  Wavelength: {wavelength*1e9:.0f} nm
+  Pixel size: {pixelsize*1e6:.1f} µm
+  Distance: {distance*1e3:.1f} mm
+  Result shape: {results['intensity'].shape}
+  Intensity range: {results['intensity'].min():.3f} - {results['intensity'].max():.3f}
+  Phase range: {results['phase'].min():.3f} - {results['phase'].max():.3f}
+  Amplitude range: {results['amplitude'].min():.3f} - {results['amplitude'].max():.3f}"""
+        
+        document.getElementById('processingResults').innerHTML = f"<pre>{result_text}</pre>"
+        
+    except Exception as e:
+        document.getElementById('processingResults').innerHTML = f"<pre style='color: red;'>❌ Processing error: {str(e)}</pre>"
+
+def generate_sample_hologram():
+    """Generate a new sample hologram"""
+    try:
+        if 'processor' not in notebook_state:
+            notebook_state['processor'] = HologramProcessor()
+        
+        processor = notebook_state['processor']
+        hologram = processor.create_sample_hologram(256, 'circles')
+        notebook_state['current_hologram'] = hologram
+        
+        display_array_on_canvas(hologram, 'originalCanvas')
+        document.getElementById('originalInfo').innerHTML = f"New sample hologram: {hologram.shape}, range: {hologram.min():.3f} - {hologram.max():.3f}"
+        
+        # Clear previous results
+        document.getElementById('processingResults').innerHTML = "<em>New hologram generated. Click 'Process Hologram' to reconstruct.</em>"
+        
+    except Exception as e:
+        document.getElementById('processingResults').innerHTML = f"<pre style='color: red;'>❌ Generation error: {str(e)}</pre>"
+
 # Make functions available to JavaScript
 import js
 js.window.runCell2 = create_proxy(run_cell_2)
 js.window.runCell3 = create_proxy(run_cell_3) 
 js.window.runCell4 = create_proxy(run_cell_4)
+js.window.processHologramDemo = create_proxy(process_hologram_demo)
+js.window.generateSampleHologram = create_proxy(generate_sample_hologram)
 
 # Parameter update functions
 def update_wavelength():
@@ -457,11 +556,19 @@ document.getElementById('distance').addEventListener('input', create_proxy(updat
 # Process hologram button
 def process_hologram_handler():
     if 4 in notebook_state['cells_run']:
-        process_and_display_hologram()
+        process_hologram_demo()
     else:
         document.getElementById('processingResults').innerHTML = "<pre style='color: orange;'>⚠️ Please run Cell 4 first to load the demo functions</pre>"
 
+# Generate sample button
+def generate_sample_handler():
+    if 2 in notebook_state['cells_run']:
+        generate_sample_hologram()
+    else:
+        document.getElementById('processingResults').innerHTML = "<pre style='color: orange;'>⚠️ Please run Cell 2 first to initialize the processor</pre>"
+
 document.getElementById('processHologram').addEventListener('click', create_proxy(process_hologram_handler))
+document.getElementById('generateSample').addEventListener('click', create_proxy(generate_sample_handler))
 
 # Run all cells button
 def run_all_cells():
@@ -472,8 +579,11 @@ def run_all_cells():
 
 document.getElementById('runAll').addEventListener('click', create_proxy(run_all_cells))
 
-print("🚀 Notebook initialized successfully!")
-print("Click 'Run All Cells' to execute all code cells")
+print("🚀 HoloBox Notebook initialized successfully!")
+print("📚 Comprehensive hologram processing library loaded")
+print("🎯 Click 'Run All Cells' to execute all code cells")
+print("🔬 Click 'Generate Sample Hologram' to create test data")
+print("⚡ Click 'Process Hologram' to run reconstruction")
 </py-script>
 
 <script>
