@@ -15,3 +15,6 @@ Software/ssl_certs/
 __pycache__/
 *.pyc
 *.pyo
+
+# JupyterLite build artifacts
+Software/jupyter_build/
