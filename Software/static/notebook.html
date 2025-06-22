@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>HoloBox Jupyter Notebook (Offline)</title>
+  <!-- Bootstrap CSS - fallback to online if offline version not available -->
+  <link href="./vendor/bootstrap.min.css" rel="stylesheet" onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css';">
+  <!-- PyScript CSS - fallback to online if offline version not available -->
+  <link rel="stylesheet" href="./vendor/pyscript-core.css" onerror="this.onerror=null;this.href='https://pyscript.net/releases/2025.5.1/core.css';" />
+  <!-- PyScript JS - fallback to online if offline version not available -->
+  <script type="module" src="./vendor/pyscript-core.js" onerror="this.onerror=null;document.head.appendChild(Object.assign(document.createElement('script'),{type:'module',src:'https://pyscript.net/releases/2025.5.1/core.js'}));"></script>
+  
+  <style>
+    .notebook-cell {
+      border: 1px solid #dee2e6;
+      border-radius: 4px;
+      margin: 10px 0;
+      padding: 0;
+    }
+    .cell-header {
+      background: #f8f9fa;
+      padding: 8px 12px;
+      border-bottom: 1px solid #dee2e6;
+      font-size: 0.9em;
+      color: #6c757d;
+    }
+    .cell-content {
+      padding: 12px;
+    }
+    .code-cell {
+      background: #f8f9fa;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9em;
+    }
+    .markdown-cell {
+      background: white;
+    }
+    .output-cell {
+      background: white;
+      border-top: 1px solid #dee2e6;
+      padding: 12px;
+    }
+    #notebook-title {
+      color: #007bff;
+      margin-bottom: 20px;
+    }
+    .run-button {
+      float: right;
+      margin-top: -5px;
+    }
+    .image-output {
+      max-width: 100%;
+      margin: 10px 0;
+    }
+    .parameter-controls {
+      background: #e9ecef;
+      padding: 15px;
+      border-radius: 5px;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body class="bg-light">
+
+<nav class="navbar navbar-dark bg-dark px-3">
+  <span class="navbar-brand">HoloBox Jupyter Notebook (Offline)</span>
+  <div class="d-flex">
+    <button id="runAll" class="btn btn-outline-light">Run All Cells</button>
+  </div>
+</nav>
+
+<div class="container-fluid py-4">
+  <h1 id="notebook-title">Inline Hologram Reconstruction</h1>
+  <p class="text-muted">This notebook demonstrates hologram reconstruction using the HoloBox system, running entirely offline.</p>
+
+  <!-- Cell 1: Introduction -->
+  <div class="notebook-cell markdown-cell">
+    <div class="cell-header">Markdown Cell [1]</div>
+    <div class="cell-content">
+      <h2>Introduction</h2>
+      <p>This notebook demonstrates inline hologram reconstruction using Fresnel propagation. The implementation runs entirely in the browser using PyScript.</p>
+      <h3>Key Features:</h3>
+      <ul>
+        <li>Real-time hologram processing</li>
+        <li>Interactive parameter control</li>
+        <li>Offline operation (no internet required)</li>
+        <li>Integration with HoloBox camera system</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Cell 2: Imports and Setup -->
+  <div class="notebook-cell code-cell">
+    <div class="cell-header">
+      Code Cell [2] 
+      <button class="btn btn-sm btn-primary run-button" onclick="runCell2()">Run</button>
+    </div>
+    <div class="cell-content">
+      <pre><code># Import required libraries
+import numpy as np
+import matplotlib.pyplot as plt
+from js import document, console, ImageData, Uint8ClampedArray
+from pyodide.ffi import create_proxy
+import asyncio
+
+# Set up matplotlib for inline plotting
+import matplotlib
+matplotlib.use('Agg')  # Use Agg backend for web
+
+print("✅ Libraries imported successfully")
+print("✅ Matplotlib configured for web display")
+print("✅ Ready for hologram processing")</code></pre>
+    </div>
+    <div class="output-cell" id="cell2-output">
+      <em>Click "Run" to execute this cell</em>
+    </div>
+  </div>
+
+  <!-- Cell 3: Core Functions -->
+  <div class="notebook-cell code-cell">
+    <div class="cell-header">
+      Code Cell [3] - Core Hologram Functions
+      <button class="btn btn-sm btn-primary run-button" onclick="runCell3()">Run</button>
+    </div>
+    <div class="cell-content">
+      <pre><code># Core hologram processing functions
+def abssqr(x):
+    """Calculate intensity (what a detector sees)"""
+    return np.real(x * np.conj(x))
+
+def FT(x):
+    """Forward Fourier transform with proper frequency shift"""
+    return np.fft.fftshift(np.fft.fft2(x))
+
+def iFT(x):
+    """Inverse Fourier transform with proper frequency shift"""
+    return np.fft.ifft2(np.fft.ifftshift(x))
+
+def fresnel_propagator(E0, ps, lambda0, z):
+    """
+    Freespace propagation using Fresnel kernel
+    
+    Args:
+        E0: Initial complex field in x-y source plane
+        ps: Pixel size in meters
+        lambda0: Wavelength in meters  
+        z: Distance from sensor to object in meters
+    
+    Returns:
+        Ef: Propagated output field
+    """
+    upsample_scale = 1
+    n = upsample_scale * E0.shape[1]  # Image width in pixels
+    grid_size = ps * n                # Grid size in x-direction
+    
+    # Inverse space (frequency domain)
+    fx = np.linspace(-(n-1)/2*(1/grid_size), (n-1)/2*(1/grid_size), n)
+    fy = np.linspace(-(n-1)/2*(1/grid_size), (n-1)/2*(1/grid_size), n)
+    Fx, Fy = np.meshgrid(fx, fy)
+    
+    # Fresnel kernel / point spread function
+    H = np.exp(1j*(2 * np.pi / lambda0) * z) * np.exp(1j * np.pi * lambda0 * z * (Fx**2 + Fy**2))
+    
+    # Apply Fresnel propagation
+    Ef = iFT(FT(E0) * H)
+    
+    return Ef
+
+print("✅ Core functions defined")
+print("Functions available: abssqr, FT, iFT, fresnel_propagator")</code></pre>
+    </div>
+    <div class="output-cell" id="cell3-output">
+      <em>Click "Run" to execute this cell</em>
+    </div>
+  </div>
+
+  <!-- Cell 4: Interactive Parameters -->
+  <div class="notebook-cell">
+    <div class="cell-header">Interactive Parameters</div>
+    <div class="cell-content parameter-controls">
+      <div class="row">
+        <div class="col-md-4">
+          <label for="wavelength" class="form-label">Wavelength (nm): <span id="wavelength-value">440</span></label>
+          <input type="range" class="form-range" id="wavelength" min="400" max="700" value="440" step="10">
+        </div>
+        <div class="col-md-4">
+          <label for="pixelsize" class="form-label">Pixel Size (µm): <span id="pixelsize-value">1.4</span></label>
+          <input type="range" class="form-range" id="pixelsize" min="0.5" max="5.0" value="1.4" step="0.1">
+        </div>
+        <div class="col-md-4">
+          <label for="distance" class="form-label">Distance (mm): <span id="distance-value">5.0</span></label>
+          <input type="range" class="form-range" id="distance" min="0.1" max="20.0" value="5.0" step="0.1">
+        </div>
+      </div>
+      <div class="row mt-3">
+        <div class="col-auto">
+          <button id="generateSample" class="btn btn-info">Generate Sample Hologram</button>
+          <button id="processHologram" class="btn btn-success">Process Hologram</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cell 5: Hologram Processing Demo -->
+  <div class="notebook-cell code-cell">
+    <div class="cell-header">
+      Code Cell [4] - Hologram Processing Demo
+      <button class="btn btn-sm btn-primary run-button" onclick="runCell4()">Run</button>
+    </div>
+    <div class="cell-content">
+      <pre><code># Demo hologram processing
+def create_sample_hologram(size=256):
+    """Create a sample hologram for demonstration"""
+    # Create a synthetic hologram pattern
+    x = np.linspace(-1, 1, size)
+    y = np.linspace(-1, 1, size)
+    X, Y = np.meshgrid(x, y)
+    
+    # Create some sample objects (circles)
+    obj1 = np.exp(-((X-0.3)**2 + (Y-0.2)**2) / 0.01)
+    obj2 = np.exp(-((X+0.2)**2 + (Y-0.3)**2) / 0.02)
+    
+    # Add some interference patterns
+    hologram = 1 + 0.5 * np.cos(10 * np.pi * X) * obj1 + 0.3 * np.cos(15 * np.pi * Y) * obj2
+    
+    # Add some noise
+    hologram += 0.1 * np.random.random((size, size))
+    
+    return hologram
+
+def process_and_display_hologram():
+    """Process hologram with current parameters and display results"""
+    # Get current parameters
+    wavelength = float(document.getElementById('wavelength').value) * 1e-9  # nm to m
+    pixelsize = float(document.getElementById('pixelsize').value) * 1e-6   # µm to m
+    distance = float(document.getElementById('distance').value) * 1e-3     # mm to m
+    
+    # Create sample hologram
+    hologram = create_sample_hologram()
+    
+    # Process hologram
+    reconstructed = fresnel_propagator(hologram.astype(complex), pixelsize, wavelength, distance)
+    
+    # Calculate intensity
+    intensity = abssqr(reconstructed)
+    
+    # Display results (simplified for demo)
+    print(f"Processed hologram with:")
+    print(f"  Wavelength: {wavelength*1e9:.0f} nm")
+    print(f"  Pixel size: {pixelsize*1e6:.1f} µm") 
+    print(f"  Distance: {distance*1e3:.1f} mm")
+    print(f"  Result shape: {intensity.shape}")
+    print(f"  Intensity range: {intensity.min():.3f} - {intensity.max():.3f}")
+    
+    return hologram, intensity
+
+# Make function available globally
+import js
+js.window.processHologramDemo = create_proxy(process_and_display_hologram)
+
+print("✅ Demo functions ready")
+print("Use the 'Process Hologram' button to run the demo")</code></pre>
+    </div>
+    <div class="output-cell" id="cell4-output">
+      <em>Click "Run" to execute this cell</em>
+    </div>
+  </div>
+
+  <!-- Cell 6: Results Display -->
+  <div class="notebook-cell">
+    <div class="cell-header">Results Display</div>
+    <div class="cell-content">
+      <div class="row">
+        <div class="col-md-6">
+          <h5>Original Hologram</h5>
+          <canvas id="originalCanvas" width="256" height="256" style="border: 1px solid #ccc; max-width: 100%;"></canvas>
+        </div>
+        <div class="col-md-6">
+          <h5>Reconstructed Image</h5>
+          <canvas id="reconstructedCanvas" width="256" height="256" style="border: 1px solid #ccc; max-width: 100%;"></canvas>
+        </div>
+      </div>
+      <div id="processingResults" class="mt-3">
+        <em>Run the processing demo to see results here</em>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cell 7: Integration Info -->
+  <div class="notebook-cell markdown-cell">
+    <div class="cell-header">Markdown Cell [5]</div>
+    <div class="cell-content">
+      <h3>Integration with HoloBox System</h3>
+      <p>This notebook can be integrated with the main HoloBox camera system:</p>
+      <ul>
+        <li><strong>Live Processing:</strong> Process real-time camera feeds</li>
+        <li><strong>Parameter Control:</strong> Adjust wavelength, pixel size, and distance</li>
+        <li><strong>Export Results:</strong> Save processed images and parameters</li>
+        <li><strong>Offline Operation:</strong> Works without internet connectivity</li>
+      </ul>
+      <div class="alert alert-info">
+        <strong>Note:</strong> For live camera integration, use the main interface at <a href="../index.html">index.html</a>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- PyScript Configuration -->
+<py-config>
+  packages = ["numpy", "matplotlib"]
+</py-config>
+
+<!-- PyScript for notebook functionality -->
+<py-script>
+# Global variables for notebook state
+notebook_state = {
+    'cells_run': set(),
+    'variables': {}
+}
+
+def run_cell_2():
+    """Execute cell 2 - imports and setup"""
+    try:
+        # Import required libraries
+        import numpy as np
+        import matplotlib.pyplot as plt
+        from js import document, console, ImageData, Uint8ClampedArray
+        from pyodide.ffi import create_proxy
+        import asyncio
+        
+        # Set up matplotlib for inline plotting
+        import matplotlib
+        matplotlib.use('Agg')  # Use Agg backend for web
+        
+        output = """✅ Libraries imported successfully
+✅ Matplotlib configured for web display
+✅ Ready for hologram processing"""
+        
+        document.getElementById('cell2-output').innerHTML = f"<pre>{output}</pre>"
+        notebook_state['cells_run'].add(2)
+        
+    except Exception as e:
+        document.getElementById('cell2-output').innerHTML = f"<pre style='color: red;'>❌ Error: {str(e)}</pre>"
+
+def run_cell_3():
+    """Execute cell 3 - core functions"""
+    try:
+        # Define core functions
+        exec("""
+def abssqr(x):
+    return np.real(x * np.conj(x))
+
+def FT(x):
+    return np.fft.fftshift(np.fft.fft2(x))
+
+def iFT(x):
+    return np.fft.ifft2(np.fft.ifftshift(x))
+
+def fresnel_propagator(E0, ps, lambda0, z):
+    upsample_scale = 1
+    n = upsample_scale * E0.shape[1]
+    grid_size = ps * n
+    
+    fx = np.linspace(-(n-1)/2*(1/grid_size), (n-1)/2*(1/grid_size), n)
+    fy = np.linspace(-(n-1)/2*(1/grid_size), (n-1)/2*(1/grid_size), n)
+    Fx, Fy = np.meshgrid(fx, fy)
+    
+    H = np.exp(1j*(2 * np.pi / lambda0) * z) * np.exp(1j * np.pi * lambda0 * z * (Fx**2 + Fy**2))
+    
+    Ef = iFT(FT(E0) * H)
+    
+    return Ef
+""", globals())
+        
+        output = """✅ Core functions defined
+Functions available: abssqr, FT, iFT, fresnel_propagator"""
+        
+        document.getElementById('cell3-output').innerHTML = f"<pre>{output}</pre>"
+        notebook_state['cells_run'].add(3)
+        
+    except Exception as e:
+        document.getElementById('cell3-output').innerHTML = f"<pre style='color: red;'>❌ Error: {str(e)}</pre>"
+
+def run_cell_4():
+    """Execute cell 4 - demo functions"""
+    try:
+        # Define demo functions
+        exec("""
+def create_sample_hologram(size=256):
+    x = np.linspace(-1, 1, size)
+    y = np.linspace(-1, 1, size)
+    X, Y = np.meshgrid(x, y)
+    
+    obj1 = np.exp(-((X-0.3)**2 + (Y-0.2)**2) / 0.01)
+    obj2 = np.exp(-((X+0.2)**2 + (Y-0.3)**2) / 0.02)
+    
+    hologram = 1 + 0.5 * np.cos(10 * np.pi * X) * obj1 + 0.3 * np.cos(15 * np.pi * Y) * obj2
+    hologram += 0.1 * np.random.random((size, size))
+    
+    return hologram
+
+def process_and_display_hologram():
+    wavelength = float(document.getElementById('wavelength').value) * 1e-9
+    pixelsize = float(document.getElementById('pixelsize').value) * 1e-6
+    distance = float(document.getElementById('distance').value) * 1e-3
+    
+    hologram = create_sample_hologram()
+    reconstructed = fresnel_propagator(hologram.astype(complex), pixelsize, wavelength, distance)
+    intensity = abssqr(reconstructed)
+    
+    result = f'''Processed hologram with:
+  Wavelength: {wavelength*1e9:.0f} nm
+  Pixel size: {pixelsize*1e6:.1f} µm
+  Distance: {distance*1e3:.1f} mm
+  Result shape: {intensity.shape}
+  Intensity range: {intensity.min():.3f} - {intensity.max():.3f}'''
+    
+    document.getElementById('processingResults').innerHTML = f"<pre>{result}</pre>"
+    
+    return hologram, intensity
+""", globals())
+        
+        output = """✅ Demo functions ready
+Use the 'Process Hologram' button to run the demo"""
+        
+        document.getElementById('cell4-output').innerHTML = f"<pre>{output}</pre>"
+        notebook_state['cells_run'].add(4)
+        
+    except Exception as e:
+        document.getElementById('cell4-output').innerHTML = f"<pre style='color: red;'>❌ Error: {str(e)}</pre>"
+
+# Make functions available to JavaScript
+import js
+js.window.runCell2 = create_proxy(run_cell_2)
+js.window.runCell3 = create_proxy(run_cell_3) 
+js.window.runCell4 = create_proxy(run_cell_4)
+
+# Parameter update functions
+def update_wavelength():
+    value = document.getElementById('wavelength').value
+    document.getElementById('wavelength-value').textContent = value
+
+def update_pixelsize():
+    value = document.getElementById('pixelsize').value
+    document.getElementById('pixelsize-value').textContent = value
+
+def update_distance():
+    value = document.getElementById('distance').value
+    document.getElementById('distance-value').textContent = value
+
+# Set up parameter controls
+document.getElementById('wavelength').addEventListener('input', create_proxy(update_wavelength))
+document.getElementById('pixelsize').addEventListener('input', create_proxy(update_pixelsize))
+document.getElementById('distance').addEventListener('input', create_proxy(update_distance))
+
+# Process hologram button
+def process_hologram_handler():
+    if 4 in notebook_state['cells_run']:
+        process_and_display_hologram()
+    else:
+        document.getElementById('processingResults').innerHTML = "<pre style='color: orange;'>⚠️ Please run Cell 4 first to load the demo functions</pre>"
+
+document.getElementById('processHologram').addEventListener('click', create_proxy(process_hologram_handler))
+
+# Run all cells button
+def run_all_cells():
+    run_cell_2()
+    run_cell_3()
+    run_cell_4()
+    console.log("All cells executed")
+
+document.getElementById('runAll').addEventListener('click', create_proxy(run_all_cells))
+
+print("🚀 Notebook initialized successfully!")
+print("Click 'Run All Cells' to execute all code cells")
+</py-script>
+
+<script>
+// JavaScript for enhanced notebook functionality
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('HoloBox Notebook loaded');
+    
+    // Add keyboard shortcuts
+    document.addEventListener('keydown', function(e) {
+        if (e.ctrlKey && e.key === 'Enter') {
+            // Ctrl+Enter to run all cells
+            document.getElementById('runAll').click();
+        }
+    });
+});
+</script>
+
+</body>
+</html>
