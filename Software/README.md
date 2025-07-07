@@ -15,6 +15,7 @@ sudo apt-get update
 sudo apt-get install git python3-pip python3-picamera2 -y
 sudo apt install -y libcap2-dev build-essential python3-dev
 sudo apt install -y python3-libcamera libcamera-dev libcamera-apps
+pip3 install --no-cache-dir --upgrade picamera2 --break-system-packages
 git clone https://github.com/openUC2/TechnicalDocs-openUC2-HoloBox/
 cd TechnicalDocs-openUC2-HoloBox/Software
 chmod +x setup_holobox.sh
