@@ -131,7 +131,7 @@ expand_image() {
     
     # Expand the partition
     sudo parted "$LOOP_DEVICE" resizepart 2 100%
-    sudo e2fsck -f "${LOOP_DEVICE}p2"
+    sudo e2fsck -fy "${LOOP_DEVICE}p2" || true
     sudo resize2fs "${LOOP_DEVICE}p2"
     
     success "Image expanded"

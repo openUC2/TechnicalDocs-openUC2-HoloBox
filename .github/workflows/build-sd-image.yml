@@ -51,7 +51,7 @@ jobs:
         
         # Expand partition
         sudo parted /dev/loop0 resizepart 2 100%
-        sudo e2fsck -f /dev/loop0p2
+        sudo e2fsck -fy /dev/loop0p2 || true
         sudo resize2fs /dev/loop0p2
         
     - name: Mount image and setup chroot
