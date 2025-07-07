@@ -12,7 +12,7 @@ This reorganized software provides a streamlined FastAPI backend for camera stre
 
 ```
 sudo apt-get update 
-sudo apt-get install git python3-pip -y
+sudo apt-get install git python3-pip python3-picamera2 -y
 sudo apt install -y libcap2-dev build-essential python3-dev 
 git clone https://github.com/openUC2/TechnicalDocs-openUC2-HoloBox/
 cd TechnicalDocs-openUC2-HoloBox/Software
