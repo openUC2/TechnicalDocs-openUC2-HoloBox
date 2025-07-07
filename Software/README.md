@@ -29,7 +29,24 @@ This reorganized software provides a streamlined FastAPI backend for camera stre
 
 ## Quick Setup (Raspberry Pi)
 
-### Complete Installation
+### Option 1: Pre-built SD Card Image (Recommended)
+
+**🎉 New: Pre-built SD card images are now available!**
+
+1. **Download** the latest image from [Releases](https://github.com/openUC2/TechnicalDocs-openUC2-HoloBox/releases)
+2. **Flash** the `.img.zip` file to an SD card (8GB+ recommended) using Raspberry Pi Imager
+3. **Insert** the SD card into your Raspberry Pi and power on
+4. **Connect** to WiFi network `HoloBox-XXXXX` (password: `holobox123`)
+5. **Open browser** to `http://192.168.4.1:8000/static/`
+
+**Features included in SD card image:**
+- ✅ All software pre-installed and configured
+- ✅ Works completely offline (no internet required)
+- ✅ Automatic startup on boot
+- ✅ Access Point mode ready to use
+- ✅ Default credentials: SSH user `pi`, password `holobox123`
+
+### Option 2: Manual Installation
 ```bash
 cd Software
 sudo bash setup_holobox.sh
@@ -171,6 +188,15 @@ The implementation uses the angular spectrum method:
 - `GET /stats`: Image statistics
 
 ### Dependencies
+
+#### SD Card Images
+
+For the easiest setup, use the pre-built SD card images from the [Releases](https://github.com/openUC2/TechnicalDocs-openUC2-HoloBox/releases) section. These include all dependencies pre-installed and work offline.
+
+**Building SD Card Images:**
+- See `Scripts/README.md` for detailed build instructions
+- Automated builds via GitHub Actions on new releases
+- Local builds supported with `Scripts/build_sd_image.sh`
 
 #### Core API Server
 - `fastapi`: Web API framework

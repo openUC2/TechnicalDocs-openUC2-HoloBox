@@ -10,7 +10,15 @@ echo "=========================================="
 # Configuration
 INSTALL_DIR="/opt/holobox"
 SERVICE_USER="pi"
-REPO_DIR="/home/runner/work/TechnicalDocs-openUC2-HoloBox/TechnicalDocs-openUC2-HoloBox"
+# Try to detect the correct repo directory
+if [ -d "/home/runner/work/TechnicalDocs-openUC2-HoloBox/TechnicalDocs-openUC2-HoloBox" ]; then
+    REPO_DIR="/home/runner/work/TechnicalDocs-openUC2-HoloBox/TechnicalDocs-openUC2-HoloBox"
+elif [ -d "$(dirname "$(readlink -f "$0")")" ]; then
+    REPO_DIR="$(dirname "$(readlink -f "$0")")"
+else
+    echo "Error: Cannot find source directory"
+    exit 1
+fi
 
 # Check if running as root
 if [[ $EUID -eq 0 ]]; then

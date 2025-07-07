@@ -1,0 +1,302 @@
+name: Build HoloBox SD Card Image
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-sd-image:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Free up disk space
+      run: |
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /opt/hostedtoolcache/CodeQL
+        sudo docker image prune --all --force
+        df -h
+        
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          qemu-user-static \
+          binfmt-support \
+          parted \
+          kpartx \
+          zip \
+          wget \
+          curl \
+          xz-utils
+          
+    - name: Download Raspberry Pi OS Lite 64-bit
+      run: |
+        wget -O rpi-os-lite.img.xz https://downloads.raspberrypi.org/raspios_lite_arm64/images/raspios_lite_arm64-2024-03-15/2024-03-15-raspios-bookworm-arm64-lite.img.xz
+        xz -d rpi-os-lite.img.xz
+        
+    - name: Expand image size
+      run: |
+        # Add 2GB to the image to accommodate our software
+        dd if=/dev/zero bs=1M count=2048 >> rpi-os-lite.img
+        
+        # Setup loop device
+        sudo losetup -P /dev/loop0 rpi-os-lite.img
+        
+        # Expand partition
+        sudo parted /dev/loop0 resizepart 2 100%
+        sudo e2fsck -f /dev/loop0p2
+        sudo resize2fs /dev/loop0p2
+        
+    - name: Mount image and setup chroot
+      run: |
+        mkdir -p /tmp/rpi-root
+        sudo mount /dev/loop0p2 /tmp/rpi-root
+        sudo mount /dev/loop0p1 /tmp/rpi-root/boot
+        
+        # Setup chroot environment
+        sudo cp /usr/bin/qemu-aarch64-static /tmp/rpi-root/usr/bin/
+        
+        # Mount proc, sys, dev for chroot
+        sudo mount -t proc proc /tmp/rpi-root/proc
+        sudo mount -t sysfs sysfs /tmp/rpi-root/sys
+        sudo mount --bind /dev /tmp/rpi-root/dev
+        sudo mount --bind /dev/pts /tmp/rpi-root/dev/pts
+        
+        # Copy our software into the image
+        sudo mkdir -p /tmp/rpi-root/opt/holobox-install
+        sudo cp -r Software/* /tmp/rpi-root/opt/holobox-install/
+        
+    - name: Install HoloBox software in chroot
+      run: |
+        # Create install script for chroot environment
+        cat << 'EOF' | sudo tee /tmp/rpi-root/install_holobox.sh
+        #!/bin/bash
+        set -e
+        
+        # Enable networking (required for package installation)
+        echo "nameserver 8.8.8.8" > /etc/resolv.conf
+        
+        # Update package lists
+        apt-get update
+        
+        # Install required packages
+        apt-get install -y \
+          python3 \
+          python3-pip \
+          python3-venv \
+          hostapd \
+          dnsmasq \
+          iptables-persistent \
+          git \
+          curl \
+          wget
+        
+        # Create pi user if it doesn't exist
+        useradd -m -s /bin/bash pi || true
+        usermod -aG sudo pi || true
+        echo "pi:holobox123" | chpasswd
+        
+        # Create installation directory
+        mkdir -p /opt/holobox
+        chown pi:pi /opt/holobox
+        
+        # Copy software files
+        cp -r /opt/holobox-install/* /opt/holobox/
+        chown -R pi:pi /opt/holobox
+        chmod +x /opt/holobox/*.sh
+        
+        # Create virtual environment as pi user
+        cd /opt/holobox
+        sudo -u pi python3 -m venv venv
+        sudo -u pi /opt/holobox/venv/bin/pip install --upgrade pip
+        
+        # Install Python packages
+        sudo -u pi /opt/holobox/venv/bin/pip install \
+          fastapi==0.110.0 \
+          uvicorn[standard]==0.29.0 \
+          numpy==1.26.4 \
+          opencv-python-headless==4.10.0.82 \
+          pydantic==2.7.1
+        
+        # Try to install picamera2
+        sudo -u pi /opt/holobox/venv/bin/pip install picamera2==0.3.11 || echo "Warning: picamera2 installation failed"
+        
+        # Set up log directory
+        mkdir -p /var/log/holobox
+        chown pi:pi /var/log/holobox
+        
+        # Create systemd service
+        cat << 'SERVICE_EOF' > /etc/systemd/system/holobox-camera.service
+        [Unit]
+        Description=HoloBox Camera API Server
+        After=network.target
+        
+        [Service]
+        Type=simple
+        User=pi
+        WorkingDirectory=/opt/holobox
+        ExecStart=/opt/holobox/venv/bin/python /opt/holobox/streamlined_camera_api.py --host 0.0.0.0 --port 8000
+        Restart=on-failure
+        RestartSec=5
+        StandardOutput=append:/var/log/holobox/camera.log
+        StandardError=append:/var/log/holobox/camera.log
+        
+        [Install]
+        WantedBy=multi-user.target
+        SERVICE_EOF
+        
+        # Enable the service
+        systemctl daemon-reload
+        systemctl enable holobox-camera.service
+        
+        # Create system info script
+        cat << 'INFO_EOF' > /usr/local/bin/holobox-info
+        #!/bin/bash
+        echo "HoloBox System Information"
+        echo "=========================="
+        echo "Service Status:"
+        systemctl status holobox-camera.service --no-pager -l
+        echo ""
+        echo "Network Status:"
+        ip addr show wlan0 2>/dev/null || echo "wlan0 not available"
+        iwgetid 2>/dev/null || echo "Not connected to WiFi"
+        echo ""
+        echo "Access logs:"
+        tail -n 10 /var/log/holobox/camera.log 2>/dev/null || echo "No logs yet"
+        INFO_EOF
+        
+        chmod +x /usr/local/bin/holobox-info
+        
+        # Create desktop shortcut if Desktop exists
+        if [ -d "/home/pi/Desktop" ]; then
+            cat << 'DESKTOP_EOF' > /home/pi/Desktop/HoloBox.desktop
+        [Desktop Entry]
+        Version=1.0
+        Type=Application
+        Name=HoloBox Camera
+        Comment=Open HoloBox Camera Interface
+        Exec=chromium-browser http://localhost:8000/static/
+        Icon=applications-multimedia
+        Terminal=false
+        Categories=Multimedia;
+        DESKTOP_EOF
+            chmod +x /home/pi/Desktop/HoloBox.desktop
+            chown pi:pi /home/pi/Desktop/HoloBox.desktop
+        fi
+        
+        # Enable SSH
+        systemctl enable ssh
+        
+        # Create welcome message
+        cat << 'WELCOME_EOF' > /etc/motd
+        
+        ╔══════════════════════════════════════════╗
+        ║             HoloBox System               ║
+        ╚══════════════════════════════════════════╝
+        
+        Welcome to the HoloBox SD Card Image!
+        
+        🌐 Web Interface: http://localhost:8000/static/
+        📱 Access Point: Connect to HoloBox-XXXXX (password: holobox123)
+        🔗 Gateway IP: http://192.168.4.1:8000/static/
+        
+        💡 Commands:
+           holobox-info                           - Show system status
+           sudo /opt/holobox/setup_access_point.sh - Enable Access Point mode
+           sudo /opt/holobox/setup_wifi_client.sh  - Connect to WiFi
+        
+        📖 Documentation: https://github.com/openUC2/TechnicalDocs-openUC2-HoloBox
+        
+        WELCOME_EOF
+        
+        # Clean up
+        rm -f /install_holobox.sh
+        rm -rf /opt/holobox-install
+        apt-get clean
+        rm -rf /var/lib/apt/lists/*
+        
+        echo "HoloBox installation complete!"
+        EOF
+        
+        sudo chmod +x /tmp/rpi-root/install_holobox.sh
+        
+        # Run installation in chroot
+        sudo chroot /tmp/rpi-root /install_holobox.sh
+        
+    - name: Cleanup and unmount
+      run: |
+        # Sync filesystem
+        sudo sync
+        
+        # Unmount everything
+        sudo umount /tmp/rpi-root/dev/pts || true
+        sudo umount /tmp/rpi-root/dev || true
+        sudo umount /tmp/rpi-root/sys || true
+        sudo umount /tmp/rpi-root/proc || true
+        sudo umount /tmp/rpi-root/boot || true
+        sudo umount /tmp/rpi-root || true
+        
+        # Detach loop device
+        sudo losetup -d /dev/loop0
+        
+    - name: Compress image
+      run: |
+        # Get current date for filename
+        DATE=$(date +%Y%m%d)
+        
+        # Compress the image
+        zip -9 holobox-sdcard-${DATE}.img.zip rpi-os-lite.img
+        
+        # Get file size
+        ls -lh holobox-sdcard-${DATE}.img.zip
+        
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: holobox-sdcard-*.img.zip
+        body: |
+          ## HoloBox SD Card Image
+          
+          This is a pre-configured Raspberry Pi OS Lite 64-bit image with HoloBox software pre-installed.
+          
+          ### Features Included:
+          - 🎥 HoloBox camera streaming and hologram processing
+          - 📱 Access Point mode for direct smartphone connection
+          - 🌐 Web interface for camera controls and WiFi management
+          - 🔧 Automatic startup on boot
+          - 📊 System monitoring and logging
+          
+          ### Quick Start:
+          1. Download and extract the `.img.zip` file
+          2. Flash the image to a microSD card (8GB+ recommended) using Raspberry Pi Imager or Etcher
+          3. Insert the SD card into your Raspberry Pi and power on
+          4. Connect to WiFi network `HoloBox-XXXXX` (password: `holobox123`)
+          5. Open browser and navigate to `http://192.168.4.1:8000/static/`
+          
+          ### Default Credentials:
+          - **SSH User**: `pi`
+          - **SSH Password**: `holobox123`
+          - **WiFi Hotspot**: `HoloBox-XXXXX`
+          - **WiFi Password**: `holobox123`
+          
+          ### No Internet Required:
+          This image works completely offline. All dependencies are pre-installed.
+          
+          For detailed documentation, visit: https://github.com/openUC2/TechnicalDocs-openUC2-HoloBox
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: holobox-sdcard-image
+        path: holobox-sdcard-*.img.zip
+        retention-days: 30
