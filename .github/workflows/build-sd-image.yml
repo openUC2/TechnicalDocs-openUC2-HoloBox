@@ -80,10 +80,10 @@ jobs:
         sudo cp /tmp/rpi-root/opt/holobox-install/setup_holobox.sh /tmp/rpi-root/install_holobox.sh
 
         # Ensure script is executable
-        sudo chmod +x /tmp/rpi-root/install_holobox.sh
+        sudo chmod +x /tmp/rpi-root/setup_holobox.sh
         
         # install in chroot
-        sudo chroot /tmp/rpi-root/install_holobox.sh
+        sudo chroot /tmp/rpi-root/setup_holobox.sh
 
         
         
