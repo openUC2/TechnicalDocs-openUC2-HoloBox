@@ -21,10 +21,11 @@ else
 fi
 
 # Check if running as root
-if [[ $EUID -eq 0 ]]; then
-   echo "This script should not be run as root. Please run as a regular user (pi)."
-   exit 1
-fi
+# The following check is disabled for chroot environments
+# if [[ $EUID -eq 0 ]]; then
+#    echo "This script should not be run as root. Please run as a regular user (pi)."
+#    exit 1
+# fi
 
 echo "Setting up HoloBox system..."
 echo "Installation directory: $INSTALL_DIR"
