@@ -82,8 +82,8 @@ jobs:
         # Ensure script is executable
         sudo chmod +x /tmp/rpi-root/install_holobox.sh
 
-        # install in chroot
-        sudo chroot /tmp/rpi-root/ install_holobox.sh
+        # install in chroot using bash (important for chroot environments)
+        sudo chroot /tmp/rpi-root/ /bin/bash /install_holobox.sh
         shell: /usr/bin/bash -e {0}
 
 
