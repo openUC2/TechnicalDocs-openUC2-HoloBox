@@ -83,7 +83,7 @@ jobs:
         sudo chmod +x /tmp/rpi-root/install_holobox.sh
         
         # install in chroot
-        sudo chroot /tmp/rpi-root/install_holobox.sh
+        sudo chroot /tmp/rpi-root/ install_holobox.sh
 
         
         
