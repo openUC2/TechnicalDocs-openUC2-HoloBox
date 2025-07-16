@@ -1,4 +1,4 @@
-name: Build HoloBox SD Card Image
+name: Build HoloBox SD Card Image
 
 on:
   push:
@@ -11,147 +11,287 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
+    - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Free up disk space
+    - name: Free disk
       run: |
-        sudo rm -rf /usr/share/dotnet
-        sudo rm -rf /usr/local/lib/android
-        sudo rm -rf /opt/ghc
-        sudo rm -rf /opt/hostedtoolcache/CodeQL
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
         sudo docker image prune --all --force
         df -h
 
-    - name: Install dependencies
+    - name: Deps
       run: |
         sudo apt-get update
-        sudo apt-get install -y \
-          qemu-user-static \
-          binfmt-support \
-          parted \
-          kpartx \
-          zip \
-          wget \
-          curl \
-          xz-utils
+        sudo apt-get install -y qemu-user-static binfmt-support parted kpartx zip wget curl xz-utils
 
-    - name: Download Raspberry Pi OS Lite 64-bit
+    - name: Download RPi OS Lite 64
       run: |
         wget -O rpi-os-lite.img.xz https://downloads.raspberrypi.org/raspios_lite_arm64/images/raspios_lite_arm64-2024-03-15/2024-03-15-raspios-bookworm-arm64-lite.img.xz
         xz -d rpi-os-lite.img.xz
 
-    - name: Expand image size
+    - name: Expand image
       run: |
-        # Add 2GB to the image to accommodate our software
         dd if=/dev/zero bs=1M count=2048 >> rpi-os-lite.img
-
-        # Setup loop device
         sudo losetup -P /dev/loop0 rpi-os-lite.img
-
-        # Expand partition
         sudo parted /dev/loop0 resizepart 2 100%
-        sudo e2fsck -fy /dev/loop0p2 || true
+        sudo e2fsck -f -y /dev/loop0p2 || true
         sudo resize2fs /dev/loop0p2
 
-    - name: Mount image and setup chroot
+    - name: Mount / chroot
       run: |
         mkdir -p /tmp/rpi-root
         sudo mount /dev/loop0p2 /tmp/rpi-root
         sudo mount /dev/loop0p1 /tmp/rpi-root/boot
-
-        # Setup chroot environment
         sudo cp /usr/bin/qemu-aarch64-static /tmp/rpi-root/usr/bin/
-
-        # Mount proc, sys, dev for chroot
         sudo mount -t proc proc /tmp/rpi-root/proc
         sudo mount -t sysfs sysfs /tmp/rpi-root/sys
         sudo mount --bind /dev /tmp/rpi-root/dev
         sudo mount --bind /dev/pts /tmp/rpi-root/dev/pts
 
-        # Copy our software into the image
         sudo mkdir -p /tmp/rpi-root/opt/holobox-install
         sudo cp -r Software/* /tmp/rpi-root/opt/holobox-install/
 
-    - name: Install HoloBox software in chroot
+    - name: Install in chroot
       run: |
+        cat <<'CHROOT' | sudo tee /tmp/rpi-root/install_holobox.sh
+        #!/usr/bin/env bash
+        set -e
 
-        # use script in chroot to install HoloBox
-        sudo cp /tmp/rpi-root/opt/holobox-install/setup_holobox.sh /tmp/rpi-root/install_holobox.sh
+        echo "nameserver 8.8.8.8" > /etc/resolv.conf
+        apt-get update
+        apt-get install -y python3 python3-pip python3-venv hostapd dnsmasq iptables-persistent wpa_supplicant git curl wget
 
-        # Ensure script is executable
+        useradd -m -s /bin/bash pi || true
+        usermod -aG sudo pi || true
+        echo "pi:youseetoo" | chpasswd
+
+        mkdir -p /opt/holobox
+        chown pi:pi /opt/holobox
+        cp -r /opt/holobox-install/* /opt/holobox/
+        chown -R pi:pi /opt/holobox
+        chmod +x /opt/holobox/*.sh
+
+        cd /opt/holobox
+        sudo -u pi python3 -m venv venv
+        sudo -u pi venv/bin/pip install --upgrade pip
+        sudo -u pi venv/bin/pip install fastapi==0.110.0 uvicorn[standard]==0.29.0 numpy==1.26.4 opencv-python-headless==4.10.0.82 pydantic==2.7.1 picamera2==0.3.11 || true
+
+        mkdir -p /var/log/holobox
+        chown pi:pi /var/log/holobox
+
+        cat <<'UNIT' > /etc/systemd/system/holobox-camera.service
+        [Unit]
+        Description=HoloBox Camera API Server
+        After=network.target
+
+        [Service]
+        Type=simple
+        User=pi
+        WorkingDirectory=/opt/holobox
+        ExecStart=/opt/holobox/venv/bin/python /opt/holobox/streamlined_camera_api.py --host 0.0.0.0 --port 8000
+        Restart=on-failure
+        RestartSec=5
+        StandardOutput=append:/var/log/holobox/camera.log
+        StandardError=append:/var/log/holobox/camera.log
+
+        [Install]
+        WantedBy=multi-user.target
+        UNIT
+
+        systemctl daemon-reload
+        systemctl enable holobox-camera.service
+        systemctl enable ssh
+
+        # ---------- embedded scripts ----------
+        cat <<'AP' > /opt/holobox/setup_access_point.sh
+        #!/usr/bin/env bash
+        # Setup Raspberry Pi as WiFi Access Point for HoloBox
+        # Source: setup_access_point.sh :contentReference[oaicite:0]{index=0}
+        set -e
+        SSID="HoloBox-$(hostname | tail -c 5)"
+        PASSPHRASE="holobox123"
+        INTERFACE="wlan0"
+        GATEWAY="192.168.4.1"
+
+        sudo apt-get update
+        sudo apt-get install -y hostapd dnsmasq
+        sudo systemctl stop hostapd dnsmasq
+
+        sudo tee /etc/dhcpcd.conf.holobox >/dev/null <<EOF
+        interface $INTERFACE
+            static ip_address=$GATEWAY/24
+            nohook wpa_supplicant
+        EOF
+        sudo cp /etc/dhcpcd.conf /etc/dhcpcd.conf.backup 2>/dev/null || true
+        sudo cp /etc/dhcpcd.conf.holobox /etc/dhcpcd.conf
+
+        sudo tee /etc/dnsmasq.conf.holobox >/dev/null <<EOF
+        interface=$INTERFACE
+        dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h
+        domain=holobox.local
+        local=/holobox.local/
+        EOF
+        sudo cp /etc/dnsmasq.conf /etc/dnsmasq.conf.backup 2>/dev/null || true
+        sudo cp /etc/dnsmasq.conf.holobox /etc/dnsmasq.conf
+
+        sudo tee /etc/hostapd/hostapd.conf >/dev/null <<EOF
+        interface=$INTERFACE
+        driver=nl80211
+        ssid=$SSID
+        hw_mode=g
+        channel=7
+        wmm_enabled=0
+        macaddr_acl=0
+        auth_algs=1
+        ignore_broadcast_ssid=0
+        wpa=2
+        wpa_passphrase=$PASSPHRASE
+        wpa_key_mgmt=WPA-PSK
+        wpa_pairwise=TKIP
+        rsn_pairwise=CCMP
+        EOF
+        sudo tee /etc/default/hostapd >/dev/null <<EOF
+        DAEMON_CONF="/etc/hostapd/hostapd.conf"
+        EOF
+
+        echo 'net.ipv4.ip_forward=1' | sudo tee -a /etc/sysctl.conf
+        sudo iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+        sudo iptables -A FORWARD -i eth0 -o $INTERFACE -m state --state RELATED,ESTABLISHED -j ACCEPT
+        sudo iptables -A FORWARD -i $INTERFACE -o eth0 -j ACCEPT
+        sudo sh -c "iptables-save > /etc/iptables.ipv4.nat"
+
+        sudo tee /etc/systemd/system/restore-iptables.service >/dev/null <<EOF
+        [Unit]
+        Description=Restore iptables rules
+        After=network.target
+        [Service]
+        Type=oneshot
+        ExecStart=/sbin/iptables-restore /etc/iptables.ipv4.nat
+        RemainAfterExit=yes
+        [Install]
+        WantedBy=multi-user.target
+        EOF
+
+        sudo systemctl daemon-reload
+        sudo systemctl enable hostapd dnsmasq restore-iptables
+        echo "Access Point ready; reboot to activate."
+        AP
+        chmod +x /opt/holobox/setup_access_point.sh
+
+        cat <<'WIFI' > /opt/holobox/setup_wifi_client.sh
+        #!/usr/bin/env bash
+        # Configure Raspberry Pi to connect to external WiFi
+        # Source: setup_wifi_client.sh :contentReference[oaicite:1]{index=1}
+        set -e
+        SSID=""
+        PASSPHRASE=""
+        while [[ $# -gt 0 ]]; do
+          case $1 in
+            --ssid) SSID="$2"; shift 2 ;;
+            --password) PASSPHRASE="$2"; shift 2 ;;
+            *) echo "Usage: $0 --ssid NET --password PASS"; exit 1 ;;
+          esac
+        done
+        if [[ -z "$SSID" || -z "$PASSPHRASE" ]]; then
+          echo "SSID and password required"; exit 1
+        fi
+        sudo systemctl stop hostapd dnsmasq || true
+        sudo systemctl disable hostapd dnsmasq || true
+        [[ -f /etc/dhcpcd.conf.backup ]] && sudo cp /etc/dhcpcd.conf.backup /etc/dhcpcd.conf
+        sudo tee /etc/wpa_supplicant/wpa_supplicant.conf >/dev/null <<EOF
+        country=US
+        ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
+        update_config=1
+        network={
+          ssid="$SSID"
+          psk="$PASSPHRASE"
+        }
+        EOF
+        sudo systemctl enable wpa_supplicant
+        echo "Client WiFi configured; reboot recommended."
+        WIFI
+        chmod +x /opt/holobox/setup_wifi_client.sh
+
+        cat <<'REG' > /opt/holobox/registerservice.sh
+        #!/usr/bin/env bash
+        # register and start HoloBox camera API as a systemd service
+        # Source: registerservice.sh :contentReference[oaicite:2]{index=2}
+        SERVICE=holobox-camera.service
+        sudo bash -c "cat >/etc/systemd/system/$SERVICE" <<'UNIT'
+        [Unit]
+        Description=HoloBox Camera API Server
+        After=network.target
+        [Service]
+        Type=simple
+        User=pi
+        WorkingDirectory=/opt/holobox
+        ExecStart=/opt/holobox/venv/bin/python /opt/holobox/streamlined_camera_api.py --host 0.0.0.0 --port 8000
+        Restart=on-failure
+        RestartSec=5
+        [Install]
+        WantedBy=multi-user.target
+        UNIT
+        sudo systemctl daemon-reload
+        sudo systemctl enable --now "$SERVICE"
+        REG
+        chmod +x /opt/holobox/registerservice.sh
+        # ---------- end embedded scripts ----------
+
+        cat <<'INFO' > /usr/local/bin/holobox-info
+        #!/bin/bash
+        echo "HoloBox System Information"
+        echo "=========================="
+        systemctl status holobox-camera.service --no-pager -l
+        ip addr show wlan0 2>/dev/null || echo "wlan0 not available"
+        iwgetid 2>/dev/null || echo "Not connected to WiFi"
+        tail -n 10 /var/log/holobox/camera.log 2>/dev/null || true
+        INFO
+        chmod +x /usr/local/bin/holobox-info
+
+        cat <<'MOTD' > /etc/motd
+        ╔══════════════════════════════════════════╗
+        ║             HoloBox System               ║
+        ╚══════════════════════════════════════════╝
+        Web  : http://localhost:8000/static/
+        AP   : HoloBox-XXXXX (pass: holobox123)
+        MOTD
+
+        rm -f /install_holobox.sh
+        rm -rf /opt/holobox-install
+        apt-get clean
+        rm -rf /var/lib/apt/lists/*
+        CHROOT
         sudo chmod +x /tmp/rpi-root/install_holobox.sh
+        sudo chroot /tmp/rpi-root /install_holobox.sh
 
-        # install in chroot using bash (important for chroot environments)
-        sudo chroot /tmp/rpi-root/ /bin/bash /install_holobox.sh
-        shell: /usr/bin/bash -e {0}
-
-
-    - name: Cleanup and unmount
+    - name: Unmount
       run: |
-        # Sync filesystem
         sudo sync
-
-        # Unmount everything
         sudo umount /tmp/rpi-root/dev/pts || true
         sudo umount /tmp/rpi-root/dev || true
         sudo umount /tmp/rpi-root/sys || true
         sudo umount /tmp/rpi-root/proc || true
         sudo umount /tmp/rpi-root/boot || true
         sudo umount /tmp/rpi-root || true
-
-        # Detach loop device
         sudo losetup -d /dev/loop0
 
-    - name: Compress image
+    - name: Compress
       run: |
-        # Get current date for filename
         DATE=$(date +%Y%m%d)
-
-        # Compress the image
         zip -9 holobox-sdcard-${DATE}.img.zip rpi-os-lite.img
-
-        # Get file size
         ls -lh holobox-sdcard-${DATE}.img.zip
 
-    - name: Create Release
+    - name: Release
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1
       with:
         files: holobox-sdcard-*.img.zip
-        body: |
-          ## HoloBox SD Card Image
-
-          This is a pre-configured Raspberry Pi OS Lite 64-bit image with HoloBox software pre-installed.
-
-          ### Features Included:
-          - 🎥 HoloBox camera streaming and hologram processing
-          - 📱 Access Point mode for direct smartphone connection
-          - 🌐 Web interface for camera controls and WiFi management
-          - 🔧 Automatic startup on boot
-          - 📊 System monitoring and logging
-
-          ### Quick Start:
-          1. Download and extract the `.img.zip` file
-          2. Flash the image to a microSD card (8GB+ recommended) using Raspberry Pi Imager or Etcher
-          3. Insert the SD card into your Raspberry Pi and power on
-          4. Connect to WiFi network `HoloBox-XXXXX` (password: `holobox123`)
-          5. Open browser and navigate to `http://192.168.4.1:8000/static/`
-
-          ### Default Credentials:
-          - **SSH User**: `pi`
-          - **SSH Password**: `holobox123`
-          - **WiFi Hotspot**: `HoloBox-XXXXX`
-          - **WiFi Password**: `holobox123`
-
-          ### No Internet Required:
-          This image works completely offline. All dependencies are pre-installed.
-
-          For detailed documentation, visit: https://github.com/openUC2/TechnicalDocs-openUC2-HoloBox
+        body: HoloBox SD Card Image
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Upload artifacts
+    - name: Artifact
       uses: actions/upload-artifact@v4
       with:
         name: holobox-sdcard-image
