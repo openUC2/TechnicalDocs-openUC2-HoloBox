@@ -60,7 +60,7 @@ jobs:
 
         echo "nameserver 8.8.8.8" > /etc/resolv.conf
         apt-get update
-        apt-get install -y python3 python3-pip python3-venv hostapd dnsmasq iptables-persistent wpa_supplicant git curl wget
+        apt-get install -y python3 python3-pip python3-venv hostapd dnsmasq iptables-persistent wpasupplicant git curl wget
 
         useradd -m -s /bin/bash pi || true
         usermod -aG sudo pi || true
