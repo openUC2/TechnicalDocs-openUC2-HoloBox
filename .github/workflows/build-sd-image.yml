@@ -61,7 +61,9 @@ jobs:
 
         echo "nameserver 8.8.8.8" > /etc/resolv.conf
         apt-get update
-        apt-get install -y python3 python3-pip python3-venv hostapd dnsmasq iptables-persistent wpasupplicant git curl wget
+        # Install build dependencies for Python packages including libcap-dev for python-prctl
+        apt-get install -y python3 python3-pip python3-venv hostapd dnsmasq iptables-persistent wpasupplicant git curl wget \
+                          build-essential libcap-dev pkg-config python3-dev
 
         useradd -m -s /bin/bash pi || true
         usermod -aG sudo pi || true
