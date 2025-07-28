@@ -257,8 +257,8 @@ jobs:
         AP   : HoloBox-XXXXX (pass: holobox123)
         MOTD
 
-        rm -f /install_holobox.sh
-        rm -rf /opt/holobox-install
+        #rm -f /install_holobox.sh
+        #rm -rf /opt/holobox-install
         apt-get clean
         rm -rf /var/lib/apt/lists/*
         CHROOT
