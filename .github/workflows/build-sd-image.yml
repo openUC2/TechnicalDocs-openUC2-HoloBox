@@ -76,8 +76,12 @@ jobs:
         chmod +x /opt/holobox/*.sh
 
         cd /opt/holobox
-        pip install fastapi==0.110.0 uvicorn[standard]==0.29.0 numpy==1.26.4 opencv-python-headless==4.10.0.82 pydantic==2.7.1 picamera2==0.3.11 --break-system-packages  
+        pip install fastapi==0.110.0 uvicorn[standard]==0.29.0 numpy==1.26.4 opencv-python-headless==4.10.0.82 pydantic==2.7.1 --break-system-packages  
 
+        # ensure we have the right numpy version and reinstall picamera again
+        pip install numpy==1.26.4 --break-system-packages
+        pip install picamera2 --force-reinstall --break-system-packages
+        
         mkdir -p /var/log/holobox
         chown pi:pi /var/log/holobox
 
@@ -266,9 +270,7 @@ jobs:
         sudo chmod +x /tmp/rpi-root/install_holobox.sh
         sudo chroot /tmp/rpi-root /install_holobox.sh
 
-        # ensure we have the right numpy version and reinstall picamera again
-        pip install numpy==1.26.4 --break-system-packages
-        pip install picamera2 --force-reinstall --break-system-packages
+
 
     - name: Unmount
       run: |
