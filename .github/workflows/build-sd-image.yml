@@ -266,6 +266,10 @@ jobs:
         sudo chmod +x /tmp/rpi-root/install_holobox.sh
         sudo chroot /tmp/rpi-root /install_holobox.sh
 
+        # ensure we have the right numpy version and reinstall picamera again
+        pip install numpy==1.26.4 --break-system-packages
+        pip install pip install picamera2 --force-reinstall --break-system-packages
+        
     - name: Unmount
       run: |
         sudo sync

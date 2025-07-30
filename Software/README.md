@@ -157,6 +157,21 @@ sudo systemctl status holobox-camera.service  # Check service status
 sudo tail -f /var/log/holobox/camera.log      # View logs
 ```
 
+service holobox-camera status
+sudo systemctl stop holobox-camera.service
+
+
+```
+● holobox-camera.service - HoloBox Camera API Server
+     Loaded: loaded (/etc/systemd/system/holobox-camera.service; enabled; preset: enabled)
+     Active: activating (auto-restart) (Result: exit-code) since Wed 2025-07-30 09:01:30 CEST; 3s ago
+    Process: 2428 ExecStart=python /opt/holobox/streamlined_camera_api.py --host 0.0.0.0 --port 8000 (code=exited, status=1/FAILURE)
+   Main PID: 2428 (code=exited, status=1/FAILURE)
+        CPU: 6.559s
+```
+# Show only whether the service is active
+systemctl is-active holobox-camera.service
+
 ### 3. Use Educational Jupyter Notebook
 For educational purposes and detailed learning:
 ```bash
