@@ -15,3 +15,11 @@ Software/ssl_certs/
 __pycache__/
 *.pyc
 *.pyo
+
+# SD card image build artifacts
+Scripts/holobox-sdcard-*.img.zip
+Scripts/holobox-sdcard-*.img
+/tmp/holobox-build/
+*.img
+*.img.zip
+*.img.xz

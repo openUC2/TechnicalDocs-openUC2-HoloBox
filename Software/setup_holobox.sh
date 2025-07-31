@@ -10,13 +10,22 @@ echo "=========================================="
 # Configuration
 INSTALL_DIR="/opt/holobox"
 SERVICE_USER="pi"
-REPO_DIR="/home/runner/work/TechnicalDocs-openUC2-HoloBox/TechnicalDocs-openUC2-HoloBox"
+# Try to detect the correct repo directory
+if [ -d "/home/runner/work/TechnicalDocs-openUC2-HoloBox/TechnicalDocs-openUC2-HoloBox" ]; then
+    REPO_DIR="/home/runner/work/TechnicalDocs-openUC2-HoloBox/TechnicalDocs-openUC2-HoloBox"
+elif [ -d "$(dirname "$(readlink -f "$0")")" ]; then
+    REPO_DIR="$(dirname "$(readlink -f "$0")")"
+else
+    echo "Error: Cannot find source directory"
+    exit 1
+fi
 
 # Check if running as root
-if [[ $EUID -eq 0 ]]; then
-   echo "This script should not be run as root. Please run as a regular user (pi)."
-   exit 1
-fi
+# The following check is disabled for chroot environments
+# if [[ $EUID -eq 0 ]]; then
+#    echo "This script should not be run as root. Please run as a regular user (pi)."
+#    exit 1
+# fi
 
 echo "Setting up HoloBox system..."
 echo "Installation directory: $INSTALL_DIR"
@@ -42,6 +51,7 @@ sudo apt-get install -y \
     curl \
     wget
 
+sudo apt install -y libcap2-dev libcamera-dev libcamera-apps build-essential python3-dev  python3-picamera2
 # Create installation directory
 echo "Creating installation directory..."
 sudo mkdir -p "$INSTALL_DIR"
@@ -63,10 +73,10 @@ source venv/bin/activate
 # Install Python packages
 echo "Installing Python packages..."
 pip install --upgrade pip
-pip install fastapi uvicorn numpy opencv-python-headless pydantic
+pip install fastapi uvicorn numpy opencv-python-headless pydantic --break-system-packages
 
 # Try to install picamera2 (might fail on non-Pi systems)
-pip install picamera2 || echo "Warning: picamera2 installation failed - using mock camera"
+pip install picamera2 --break-system-packages || echo "Warning: picamera2 installation failed - using mock camera"
 
 # Update service registration script to use venv
 echo "Updating service registration..."
@@ -143,6 +153,32 @@ Categories=Multimedia;
 EOF
     chmod +x "/home/$SERVICE_USER/Desktop/HoloBox.desktop"
 fi
+
+# Enable SSH
+systemctl enable ssh
+
+# Create welcome message
+cat << 'WELCOME_EOF' > /etc/motd
+
+╔══════════════════════════════════════════╗
+║             HoloBox System               ║
+╚══════════════════════════════════════════╝
+
+Welcome to the HoloBox SD Card Image!
+
+🌐 Web Interface: http://localhost:8000/static/
+📱 Access Point: Connect to HoloBox-XXXXX (password: holobox123)
+🔗 Gateway IP: http://192.168.4.1:8000/static/
+
+💡 Commands:
+    holobox-info                           - Show system status
+    sudo /opt/holobox/setup_access_point.sh - Enable Access Point mode
+    sudo /opt/holobox/setup_wifi_client.sh  - Connect to WiFi
+
+📖 Documentation: https://github.com/openUC2/TechnicalDocs-openUC2-HoloBox
+
+WELCOME_EOF
+
 
 echo ""
 echo "=========================================="

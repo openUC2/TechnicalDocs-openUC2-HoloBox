@@ -50,7 +50,24 @@ pip install -r requirements.txt --break-system-packages
 
 ## Quick Setup (Raspberry Pi)
 
-### Complete Installation
+### Option 1: Pre-built SD Card Image (Recommended)
+
+**🎉 New: Pre-built SD card images are now available!**
+
+1. **Download** the latest image from [Releases](https://github.com/openUC2/TechnicalDocs-openUC2-HoloBox/releases)
+2. **Flash** the `.img.zip` file to an SD card (8GB+ recommended) using Raspberry Pi Imager
+3. **Insert** the SD card into your Raspberry Pi and power on
+4. **Connect** to WiFi network `HoloBox-XXXXX` (password: `holobox123`)
+5. **Open browser** to `http://192.168.4.1:8000/static/`
+
+**Features included in SD card image:**
+- ✅ All software pre-installed and configured
+- ✅ Works completely offline (no internet required)
+- ✅ Automatic startup on boot
+- ✅ Access Point mode ready to use
+- ✅ Default credentials: SSH user `pi`, password `holobox123`
+
+### Option 2: Manual Installation
 ```bash
 cd Software
 sudo bash setup_holobox.sh
@@ -140,6 +157,21 @@ sudo systemctl status holobox-camera.service  # Check service status
 sudo tail -f /var/log/holobox/camera.log      # View logs
 ```
 
+service holobox-camera status
+sudo systemctl stop holobox-camera.service
+
+
+```
+● holobox-camera.service - HoloBox Camera API Server
+     Loaded: loaded (/etc/systemd/system/holobox-camera.service; enabled; preset: enabled)
+     Active: activating (auto-restart) (Result: exit-code) since Wed 2025-07-30 09:01:30 CEST; 3s ago
+    Process: 2428 ExecStart=python /opt/holobox/streamlined_camera_api.py --host 0.0.0.0 --port 8000 (code=exited, status=1/FAILURE)
+   Main PID: 2428 (code=exited, status=1/FAILURE)
+        CPU: 6.559s
+```
+# Show only whether the service is active
+systemctl is-active holobox-camera.service
+
 ### 3. Use Educational Jupyter Notebook
 For educational purposes and detailed learning:
 ```bash
@@ -192,6 +224,15 @@ The implementation uses the angular spectrum method:
 - `GET /stats`: Image statistics
 
 ### Dependencies
+
+#### SD Card Images
+
+For the easiest setup, use the pre-built SD card images from the [Releases](https://github.com/openUC2/TechnicalDocs-openUC2-HoloBox/releases) section. These include all dependencies pre-installed and work offline.
+
+**Building SD Card Images:**
+- See `Scripts/README.md` for detailed build instructions
+- Automated builds via GitHub Actions on new releases
+- Local builds supported with `Scripts/build_sd_image.sh`
 
 #### Core API Server
 - `fastapi`: Web API framework
