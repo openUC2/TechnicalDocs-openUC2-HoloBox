@@ -79,8 +79,8 @@ jobs:
         pip install fastapi==0.110.0 uvicorn[standard]==0.29.0 numpy==1.26.4 opencv-python-headless==4.10.0.82 pydantic==2.7.1 --break-system-packages  
 
         # ensure we have the right numpy version and reinstall picamera again
-        pip install numpy==1.26.4 --break-system-packages
         pip install picamera2 --force-reinstall --break-system-packages
+        pip install numpy==1.26.4 --break-system-packages
         
         mkdir -p /var/log/holobox
         chown pi:pi /var/log/holobox
@@ -94,7 +94,7 @@ jobs:
         Type=simple
         User=pi
         WorkingDirectory=/opt/holobox
-        ExecStart=python /opt/holobox/streamlined_camera_api.py --host 0.0.0.0 --port 8000
+        ExecStart=python /opt/holobox/streamlined_camera_api.py --host 0.0.0.0 --port 8001
         Restart=on-failure
         RestartSec=5
         StandardOutput=append:/var/log/holobox/camera.log
