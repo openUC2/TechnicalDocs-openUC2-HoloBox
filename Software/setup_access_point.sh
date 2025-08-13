@@ -3,12 +3,20 @@
 
 set -e
 
-# Default configuration
-SSID="HoloBox-$(hostname | tail -c 5)"
-PASSPHRASE="holobox123"
+# Default configuration  
 INTERFACE="wlan0"
 IP_RANGE="192.168.4.0/24"
 GATEWAY="192.168.4.1"
+PASSPHRASE="holobox123"
+
+# Generate MAC-based SSID using the generate_ssid.py script
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+if [ -f "$SCRIPT_DIR/generate_ssid.py" ]; then
+    SSID=$(python3 "$SCRIPT_DIR/generate_ssid.py" "$INTERFACE" | tail -n 1 | cut -d' ' -f3)
+else
+    # Fallback if script is not available
+    SSID="openUC2-$(hostname | tail -c 5)"
+fi
 
 echo "Setting up HoloBox Access Point..."
 echo "SSID: $SSID"

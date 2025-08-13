@@ -109,15 +109,138 @@ jobs:
         systemctl enable ssh
 
         # ---------- embedded scripts ----------
+        
+        # Create SSID generator script first
+        cat <<'SSIDGEN' > /opt/holobox/generate_ssid.py
+        #!/usr/bin/env python3
+        """
+        HoloBox SSID Generator
+        Generates unique SSID names based on MAC address using dictionary lookup
+        Format: openUC2-NAME1-NAME2
+        """
+        
+        import hashlib
+        import subprocess
+        import sys
+        
+        
+        # Name dictionaries for the lookup table
+        ADJECTIVES = [
+            "Bright", "Clear", "Focus", "Sharp", "Zoom", "Light", "Flash", "Lens", 
+            "Image", "Photo", "Pixel", "Frame", "View", "Scope", "Beam", "Wave",
+            "Crystal", "Prism", "Filter", "Mirror", "Optic", "Laser", "Holo", "Ray",
+            "Spectrum", "Digital", "Micro", "Macro", "Ultra", "Super", "Nano", "Mini"
+        ]
+        
+        NOUNS = [
+            "Box", "Cam", "Lab", "Scope", "Lens", "Beam", "Wave", "Light", "Focus",
+            "View", "Snap", "Shot", "Frame", "Pixel", "Image", "Photo", "Optic",
+            "Prism", "Mirror", "Filter", "Ray", "Laser", "Holo", "Spectrum", "Micro",
+            "Macro", "Unit", "Device", "System", "Tool", "Cube", "Capsule", "Pod"
+        ]
+        
+        
+        def get_mac_address(interface='wlan0'):
+            """Get MAC address of specified network interface"""
+            try:
+                # Try to read MAC from /sys/class/net
+                with open(f'/sys/class/net/{interface}/address', 'r') as f:
+                    mac = f.read().strip()
+                    return mac
+            except FileNotFoundError:
+                try:
+                    # Fallback: try to get MAC using ip command
+                    result = subprocess.run(['ip', 'link', 'show', interface], 
+                                          capture_output=True, text=True)
+                    if result.returncode == 0:
+                        for line in result.stdout.split('\n'):
+                            if 'link/ether' in line:
+                                mac = line.split()[1]
+                                return mac
+                except Exception:
+                    pass
+            
+            # If all else fails, generate a fallback based on hostname
+            try:
+                result = subprocess.run(['hostname'], capture_output=True, text=True)
+                hostname = result.stdout.strip()
+                # Create a pseudo-MAC from hostname
+                mac_hash = hashlib.md5(hostname.encode()).hexdigest()[:12]
+                mac = ':'.join([mac_hash[i:i+2] for i in range(0, 12, 2)])
+                return mac
+            except Exception:
+                # Ultimate fallback
+                return "00:00:00:00:00:01"
+        
+        
+        def mac_to_indices(mac_address):
+            """Convert MAC address to lookup table indices"""
+            # Remove colons and convert to bytes
+            mac_bytes = bytes.fromhex(mac_address.replace(':', ''))
+            
+            # Create hash for more even distribution
+            hash_bytes = hashlib.sha256(mac_bytes).digest()
+            
+            # Use first 4 bytes to generate indices
+            adj_index = (hash_bytes[0] << 8 | hash_bytes[1]) % len(ADJECTIVES)
+            noun_index = (hash_bytes[2] << 8 | hash_bytes[3]) % len(NOUNS)
+            
+            return adj_index, noun_index
+        
+        
+        def generate_ssid(interface='wlan0'):
+            """Generate SSID in format openUC2-NAME1-NAME2"""
+            mac_address = get_mac_address(interface)
+            adj_index, noun_index = mac_to_indices(mac_address)
+            
+            adjective = ADJECTIVES[adj_index]
+            noun = NOUNS[noun_index]
+            
+            ssid = f"openUC2-{adjective}-{noun}"
+            return ssid
+        
+        
+        def main():
+            """Command line interface"""
+            if len(sys.argv) > 1:
+                interface = sys.argv[1]
+            else:
+                interface = 'wlan0'
+            
+            mac = get_mac_address(interface)
+            ssid = generate_ssid(interface)
+            
+            print(f"Interface: {interface}")
+            print(f"MAC Address: {mac}")
+            print(f"Generated SSID: {ssid}")
+            
+            return ssid
+        
+        
+        if __name__ == "__main__":
+            main()
+        SSIDGEN
+        chmod +x /opt/holobox/generate_ssid.py
+
         cat <<'AP' > /opt/holobox/setup_access_point.sh
         #!/usr/bin/env bash
         # Setup Raspberry Pi as WiFi Access Point for HoloBox
         # Source: setup_access_point.sh :contentReference[oaicite:0]{index=0}
         set -e
-        SSID="HoloBox-$(hostname | tail -c 5)"
-        PASSPHRASE="holobox123"
+        # Default configuration  
         INTERFACE="wlan0"
+        IP_RANGE="192.168.4.0/24"
         GATEWAY="192.168.4.1"
+        PASSPHRASE="holobox123"
+        
+        # Generate MAC-based SSID using the generate_ssid.py script
+        SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+        if [ -f "$SCRIPT_DIR/generate_ssid.py" ]; then
+            SSID=$(python3 "$SCRIPT_DIR/generate_ssid.py" "$INTERFACE" | tail -n 1 | cut -d' ' -f3)
+        else
+            # Fallback if script is not available
+            SSID="openUC2-$(hostname | tail -c 5)"
+        fi
 
         sudo apt-get update
         sudo apt-get install -y hostapd dnsmasq
@@ -259,7 +382,7 @@ jobs:
         ║             HoloBox System               ║
         ╚══════════════════════════════════════════╝
         Web  : http://localhost:8000/static/
-        AP   : HoloBox-XXXXX (pass: holobox123)
+        AP   : openUC2-XXXXX-YYYYY (pass: holobox123)
         MOTD
 
         #rm -f /install_holobox.sh
