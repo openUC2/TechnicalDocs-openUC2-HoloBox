@@ -65,16 +65,122 @@ jobs:
         apt-get install -y python3 python3-pip hostapd dnsmasq iptables-persistent wpasupplicant git curl wget \
                           build-essential libcap-dev pkg-config python3-dev python3-picamera2 
 
-        # Create pi user and configure properly for Raspberry Pi OS
-        useradd -m -s /bin/bash pi || true
-        usermod -aG sudo pi || true
+        # Create first-boot user setup script for reliable auto-login
+        cat <<'FIRST_BOOT_USER_SETUP' > /etc/systemd/system/holobox-user-setup.service
+        [Unit]
+        Description=HoloBox First Boot User Setup
+        After=systemd-user-sessions.service
+        Before=getty@tty1.service
+        DefaultDependencies=false
+        
+        [Service]
+        Type=oneshot
+        ExecStart=/opt/holobox/setup-user-first-boot.sh
+        RemainAfterExit=yes
+        
+        [Install]
+        WantedBy=multi-user.target
+        FIRST_BOOT_USER_SETUP
+        
+        # Create the user setup script
+        cat <<'USER_SETUP_SCRIPT' > /opt/holobox/setup-user-first-boot.sh
+        #!/bin/bash
+        # HoloBox first-boot user setup script
+        set -e
+        
+        # Log everything for debugging
+        exec > /var/log/holobox-user-setup.log 2>&1
+        echo "HoloBox user setup starting at $(date)"
+        
+        # Check if pi user already exists and is properly configured
+        if ! id pi >/dev/null 2>&1; then
+            echo "Creating pi user..."
+            useradd -m -s /bin/bash -G sudo pi
+            echo "pi:youseetoo" | chpasswd
+        else
+            echo "Pi user already exists, ensuring proper configuration..."
+            usermod -aG sudo pi
+            echo "pi:youseetoo" | chpasswd
+        fi
+        
+        # Disable the userconfig service that prompts for username
+        systemctl disable userconfig.service 2>/dev/null || true
+        systemctl mask userconfig.service 2>/dev/null || true
+        
+        # Enable auto-login for pi user
+        echo "Configuring auto-login..."
+        mkdir -p /etc/systemd/system/getty@tty1.service.d
+        cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf << 'AUTOLOGIN_EOF'
+        [Service]
+        ExecStart=
+        ExecStart=-/sbin/agetty --autologin pi --noclear %I \$TERM
+        AUTOLOGIN_EOF
+        
+        # Set up SSH keys directory
+        mkdir -p /home/pi/.ssh
+        chmod 700 /home/pi/.ssh
+        chown pi:pi /home/pi/.ssh
+        
+        # Create .bashrc if it doesn't exist
+        if [ ! -f /home/pi/.bashrc ]; then
+            cp /etc/skel/.bashrc /home/pi/.bashrc
+            chown pi:pi /home/pi/.bashrc
+        fi
+        
+        # Add HoloBox info to bashrc
+        if ! grep -q "holobox-info" /home/pi/.bashrc; then
+            cat >> /home/pi/.bashrc << 'BASHRC_EOF'
+        
+        # HoloBox system information on login
+        echo ""
+        echo "Welcome to HoloBox! Run 'holobox-info' for system status."
+        echo "Web interface: http://localhost:8000/static/"
+        echo ""
+        BASHRC_EOF
+        fi
+        
+        # Ensure pi user owns their home directory
+        chown -R pi:pi /home/pi
+        
+        # Disable this service after first run
+        systemctl disable holobox-user-setup.service
+        
+        echo "HoloBox user setup completed at $(date)"
+        echo "Auto-login configured for pi user"
+        
+        # Mark as completed
+        touch /opt/holobox/.user-setup-complete
+        USER_SETUP_SCRIPT
+        
+        chmod +x /opt/holobox/setup-user-first-boot.sh
+        
+        # Enable the first-boot user setup service
+        systemctl enable holobox-user-setup.service
+        
+        # Also create a traditional pi user for fallback
+        useradd -m -s /bin/bash pi 2>/dev/null || true
+        usermod -aG sudo pi 2>/dev/null || true
         echo "pi:youseetoo" | chpasswd
         
-        # Disable first-time user setup to prevent username prompt on boot
-        systemctl disable userconfig || true
+        # Disable wizard and first-time setup services
+        systemctl disable userconfig.service 2>/dev/null || true
+        systemctl mask userconfig.service 2>/dev/null || true
+        systemctl disable piwiz.service 2>/dev/null || true
+        systemctl mask piwiz.service 2>/dev/null || true
         
-        # Create userconf.txt for boot partition to configure user
+        # Create userconf.txt for boot partition as additional fallback
         echo "pi:\$6\$rounds=656000\$YQKNpEXgsKpKhJoY\$u2LpKU3xd5JchlREtd/qXhBUOEIgM/gDp0tOk3gGnfEh76VjZcB6g7wXP2.7v3vA.T8u6pzOgKaFEaVZQMdtX0" > /boot/userconf.txt
+        
+        # Create SSH enable file for immediate SSH access
+        touch /boot/ssh
+        
+        # Set up auto-login at build time as well as first-boot
+        mkdir -p /etc/systemd/system/getty@tty1.service.d
+        cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf << 'BUILDTIME_AUTOLOGIN'
+        [Service]
+        ExecStart=
+        ExecStart=-/sbin/agetty --autologin pi --noclear %I \$TERM
+        BUILDTIME_AUTOLOGIN
 
         mkdir -p /opt/holobox
         chown pi:pi /opt/holobox
