@@ -65,9 +65,16 @@ jobs:
         apt-get install -y python3 python3-pip hostapd dnsmasq iptables-persistent wpasupplicant git curl wget \
                           build-essential libcap-dev pkg-config python3-dev python3-picamera2 
 
+        # Create pi user and configure properly for Raspberry Pi OS
         useradd -m -s /bin/bash pi || true
         usermod -aG sudo pi || true
         echo "pi:youseetoo" | chpasswd
+        
+        # Disable first-time user setup to prevent username prompt on boot
+        systemctl disable userconfig || true
+        
+        # Create userconf.txt for boot partition to configure user
+        echo "pi:\$6\$rounds=656000\$YQKNpEXgsKpKhJoY\$u2LpKU3xd5JchlREtd/qXhBUOEIgM/gDp0tOk3gGnfEh76VjZcB6g7wXP2.7v3vA.T8u6pzOgKaFEaVZQMdtX0" > /boot/userconf.txt
 
         mkdir -p /opt/holobox
         chown pi:pi /opt/holobox
@@ -240,7 +247,28 @@ jobs:
         else
             # Fallback if script is not available
             SSID="openUC2-$(hostname | tail -c 5)"
+        
+        echo "Setting up HoloBox Access Point..."
+        echo "SSID: $SSID"
+        echo "Interface: $INTERFACE"
+        echo "IP Range: $IP_RANGE"
+        
+        # Check if NetworkManager is active and configure it properly
+        if systemctl is-active --quiet NetworkManager; then
+            echo "Configuring NetworkManager for hotspot mode..."
+            # Stop any existing connections on wlan0
+            nmcli device disconnect "$INTERFACE" 2>/dev/null || true
+            # Set interface to unmanaged temporarily during setup
+            sudo tee /etc/NetworkManager/conf.d/99-unmanaged-devices.conf >/dev/null <<EOF
+        [keyfile]
+        unmanaged-devices=interface-name:$INTERFACE
+        EOF
+            sudo systemctl reload NetworkManager
+            sleep 2
         fi
+        
+        # Stop conflicting services
+        sudo systemctl stop hostapd dnsmasq wpa_supplicant 2>/dev/null || true
 
         sudo apt-get update
         sudo apt-get install -y hostapd dnsmasq
@@ -255,10 +283,16 @@ jobs:
         sudo cp /etc/dhcpcd.conf.holobox /etc/dhcpcd.conf
 
         sudo tee /etc/dnsmasq.conf.holobox >/dev/null <<EOF
+        # HoloBox Access Point DNS/DHCP configuration
         interface=$INTERFACE
         dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h
         domain=holobox.local
         local=/holobox.local/
+        # Prevent dnsmasq from using /etc/resolv.conf
+        no-resolv
+        # Use Google DNS for upstream
+        server=8.8.8.8
+        server=8.8.4.4
         EOF
         sudo cp /etc/dnsmasq.conf /etc/dnsmasq.conf.backup 2>/dev/null || true
         sudo cp /etc/dnsmasq.conf.holobox /etc/dnsmasq.conf
@@ -284,6 +318,9 @@ jobs:
         EOF
 
         echo 'net.ipv4.ip_forward=1' | sudo tee -a /etc/sysctl.conf
+        # Configure iptables with better error handling
+        sudo iptables -t nat -F POSTROUTING 2>/dev/null || true
+        sudo iptables -F FORWARD 2>/dev/null || true
         sudo iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
         sudo iptables -A FORWARD -i eth0 -o $INTERFACE -m state --state RELATED,ESTABLISHED -j ACCEPT
         sudo iptables -A FORWARD -i $INTERFACE -o eth0 -j ACCEPT
@@ -306,6 +343,26 @@ jobs:
         echo "Access Point ready; reboot to activate."
         AP
         chmod +x /opt/holobox/setup_access_point.sh
+
+        # Create additional hotspot service for better startup management
+        cat <<'HOTSPOT_SERVICE' > /etc/systemd/system/holobox-hotspot.service
+        [Unit]
+        Description=HoloBox WiFi Hotspot Setup
+        After=network.target dhcpcd.service
+        Before=hostapd.service dnsmasq.service
+        
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        ExecStartPre=/bin/sleep 5
+        ExecStart=/bin/bash -c 'ip addr add 192.168.4.1/24 dev wlan0 || true'
+        ExecStart=/bin/bash -c 'ip link set wlan0 up'
+        ExecStartPost=/bin/bash -c 'echo "Hotspot setup complete, IP: $(ip addr show wlan0 | grep "inet " | awk "{print $2}")"'
+        
+        [Install]
+        WantedBy=multi-user.target
+        HOTSPOT_SERVICE
+        systemctl enable holobox-hotspot.service
 
         cat <<'WIFI' > /opt/holobox/setup_wifi_client.sh
         #!/usr/bin/env bash
