@@ -1,4 +1,4 @@
-name: Build HoloBox SD Card Image
+name: Build HoloBox SD Card Image (NetworkManager AP)
 
 on:
   push:
@@ -25,7 +25,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y qemu-user-static binfmt-support parted kpartx zip wget curl xz-utils
 
-    - name: Download RPi OS Lite 64
+    - name: Download RPi OS Lite 64 (Bookworm)
       run: |
         wget -O rpi-os-lite.img.xz https://downloads.raspberrypi.org/raspios_lite_arm64/images/raspios_lite_arm64-2024-03-15/2024-03-15-raspios-bookworm-arm64-lite.img.xz
         xz -d rpi-os-lite.img.xz
@@ -35,7 +35,6 @@ jobs:
         dd if=/dev/zero bs=1M count=2048 >> rpi-os-lite.img
         sudo losetup -P /dev/loop0 rpi-os-lite.img
         sudo parted /dev/loop0 resizepart 2 100%
-        # Force filesystem check with automatic yes to all questions, ignore errors
         sudo e2fsck -f -y -v /dev/loop0p2 || echo "e2fsck completed with warnings/errors, continuing..."
         sudo resize2fs /dev/loop0p2
 
@@ -53,38 +52,46 @@ jobs:
         sudo mkdir -p /tmp/rpi-root/opt/holobox-install
         sudo cp -r Software/* /tmp/rpi-root/opt/holobox-install/
 
-    - name: Install in chroot
+    - name: Install in chroot (NetworkManager AP)
       run: |
         cat <<'CHROOT' | sudo tee /tmp/rpi-root/install_holobox.sh
         #!/usr/bin/env bash
         set -e
 
+        # ensure DNS for chroot
         echo "nameserver 8.8.8.8" > /etc/resolv.conf
-        apt-get update
-        # Install build dependencies for Python packages including libcap-dev for python-prctl
-        apt-get install -y python3 python3-pip hostapd dnsmasq iptables-persistent wpasupplicant git curl wget \
-                          build-essential libcap-dev pkg-config python3-dev python3-picamera2 
 
+        apt-get update
+        apt-get install -y \
+          python3 python3-pip python3-dev build-essential pkg-config \
+          python3-picamera2 \
+          wpasupplicant network-manager openssh-server git curl wget
+
+        # user 'pi'
         useradd -m -s /bin/bash pi || true
         usermod -aG sudo pi || true
         echo "pi:youseetoo" | chpasswd
 
+        # holobox files
         mkdir -p /opt/holobox
         chown pi:pi /opt/holobox
-        cp -r /opt/holobox-install/* /opt/holobox/
+        cp -r /opt/holobox-install/* /opt/holobox/ || true
         chown -R pi:pi /opt/holobox
-        chmod +x /opt/holobox/*.sh
+        chmod +x /opt/holobox/*.sh || true
 
+        # python deps
         cd /opt/holobox
-        pip install fastapi==0.110.0 uvicorn[standard]==0.29.0 numpy==1.26.4 opencv-python-headless==4.10.0.82 pydantic==2.7.1 --break-system-packages  
+        pip install --break-system-packages \
+          fastapi==0.110.0 uvicorn[standard]==0.29.0 \
+          numpy==1.26.4 opencv-python-headless==4.10.0.82 pydantic==2.7.1
+        pip install --break-system-packages --force-reinstall picamera2
+        pip install --break-system-packages numpy==1.26.4
 
-        # ensure we have the right numpy version and reinstall picamera again
-        pip install picamera2 --force-reinstall --break-system-packages
-        pip install numpy==1.26.4 --break-system-packages
-        
+        # logs
         mkdir -p /var/log/holobox
         chown pi:pi /var/log/holobox
 
+        # holobox service
         cat <<'UNIT' > /etc/systemd/system/holobox-camera.service
         [Unit]
         Description=HoloBox Camera API Server
@@ -108,149 +115,46 @@ jobs:
         systemctl enable holobox-camera.service
         systemctl enable ssh
 
-        # ---------- embedded scripts ----------
-        cat <<'AP' > /opt/holobox/setup_access_point.sh
-        #!/usr/bin/env bash
-        # Setup Raspberry Pi as WiFi Access Point for HoloBox
-        # Source: setup_access_point.sh :contentReference[oaicite:0]{index=0}
-        set -e
+        # --- NetworkManager AP configuration (no hostapd/dnsmasq) ---
+        # make sure NM is enabled; avoid conflicts if hostapd/dnsmasq preinstalled
+        systemctl disable hostapd dnsmasq 2>/dev/null || true
+        systemctl mask hostapd dnsmasq 2>/dev/null || true
+        systemctl enable NetworkManager
+
         SSID="HoloBox-$(hostname | tail -c 5)"
-        PASSPHRASE="holobox123"
-        INTERFACE="wlan0"
-        GATEWAY="192.168.4.1"
+        PASS="holobox123"
+        IFACE="wlan0"
 
-        sudo apt-get update
-        sudo apt-get install -y hostapd dnsmasq
-        sudo systemctl stop hostapd dnsmasq
+        # create/replace AP connection
+        nmcli -t -f NAME connection show | grep -q '^holobox-ap$' && nmcli connection delete holobox-ap || true
+        nmcli connection add type wifi ifname "$IFACE" con-name holobox-ap ssid "$SSID"
+        nmcli connection modify holobox-ap \
+          802-11-wireless.mode ap \
+          802-11-wireless.band bg \
+          802-11-wireless.channel 7 \
+          wifi-sec.key-mgmt wpa-psk \
+          wifi-sec.psk "$PASS" \
+          ipv4.method shared \
+          ipv4.addresses 192.168.4.1/24 \
+          ipv4.gateway 192.168.4.1 \
+          ipv6.method ignore \
+          connection.autoconnect yes \
+          connection.autoconnect-priority 100
 
-        sudo tee /etc/dhcpcd.conf.holobox >/dev/null <<EOF
-        interface $INTERFACE
-            static ip_address=$GATEWAY/24
-            nohook wpa_supplicant
-        EOF
-        sudo cp /etc/dhcpcd.conf /etc/dhcpcd.conf.backup 2>/dev/null || true
-        sudo cp /etc/dhcpcd.conf.holobox /etc/dhcpcd.conf
+        # ensure Wi-Fi radio isn't blocked at boot
+        nmcli radio wifi on || true
+        rfkill unblock wifi || true
 
-        sudo tee /etc/dnsmasq.conf.holobox >/dev/null <<EOF
-        interface=$INTERFACE
-        dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h
-        domain=holobox.local
-        local=/holobox.local/
-        EOF
-        sudo cp /etc/dnsmasq.conf /etc/dnsmasq.conf.backup 2>/dev/null || true
-        sudo cp /etc/dnsmasq.conf.holobox /etc/dnsmasq.conf
-
-        sudo tee /etc/hostapd/hostapd.conf >/dev/null <<EOF
-        interface=$INTERFACE
-        driver=nl80211
-        ssid=$SSID
-        hw_mode=g
-        channel=7
-        wmm_enabled=0
-        macaddr_acl=0
-        auth_algs=1
-        ignore_broadcast_ssid=0
-        wpa=2
-        wpa_passphrase=$PASSPHRASE
-        wpa_key_mgmt=WPA-PSK
-        wpa_pairwise=TKIP
-        rsn_pairwise=CCMP
-        EOF
-        sudo tee /etc/default/hostapd >/dev/null <<EOF
-        DAEMON_CONF="/etc/hostapd/hostapd.conf"
-        EOF
-
-        echo 'net.ipv4.ip_forward=1' | sudo tee -a /etc/sysctl.conf
-        sudo iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
-        sudo iptables -A FORWARD -i eth0 -o $INTERFACE -m state --state RELATED,ESTABLISHED -j ACCEPT
-        sudo iptables -A FORWARD -i $INTERFACE -o eth0 -j ACCEPT
-        sudo sh -c "iptables-save > /etc/iptables.ipv4.nat"
-
-        sudo tee /etc/systemd/system/restore-iptables.service >/dev/null <<EOF
-        [Unit]
-        Description=Restore iptables rules
-        After=network.target
-        [Service]
-        Type=oneshot
-        ExecStart=/sbin/iptables-restore /etc/iptables.ipv4.nat
-        RemainAfterExit=yes
-        [Install]
-        WantedBy=multi-user.target
-        EOF
-
-        sudo systemctl daemon-reload
-        sudo systemctl enable hostapd dnsmasq restore-iptables
-        echo "Access Point ready; reboot to activate."
-        AP
-        chmod +x /opt/holobox/setup_access_point.sh
-
-        cat <<'WIFI' > /opt/holobox/setup_wifi_client.sh
-        #!/usr/bin/env bash
-        # Configure Raspberry Pi to connect to external WiFi
-        # Source: setup_wifi_client.sh :contentReference[oaicite:1]{index=1}
-        set -e
-        SSID=""
-        PASSPHRASE=""
-        while [[ $# -gt 0 ]]; do
-          case $1 in
-            --ssid) SSID="$2"; shift 2 ;;
-            --password) PASSPHRASE="$2"; shift 2 ;;
-            *) echo "Usage: $0 --ssid NET --password PASS"; exit 1 ;;
-          esac
-        done
-        if [[ -z "$SSID" || -z "$PASSPHRASE" ]]; then
-          echo "SSID and password required"; exit 1
-        fi
-        sudo systemctl stop hostapd dnsmasq || true
-        sudo systemctl disable hostapd dnsmasq || true
-        [[ -f /etc/dhcpcd.conf.backup ]] && sudo cp /etc/dhcpcd.conf.backup /etc/dhcpcd.conf
-        sudo tee /etc/wpa_supplicant/wpa_supplicant.conf >/dev/null <<EOF
-        country=US
-        ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
-        update_config=1
-        network={
-          ssid="$SSID"
-          psk="$PASSPHRASE"
-        }
-        EOF
-        sudo systemctl enable wpa_supplicant
-        echo "Client WiFi configured; reboot recommended."
-        WIFI
-        chmod +x /opt/holobox/setup_wifi_client.sh
-
-        cat <<'REG' > /opt/holobox/registerservice.sh
-        #!/usr/bin/env bash
-        # register and start HoloBox camera API as a systemd service
-        # Source: registerservice.sh :contentReference[oaicite:2]{index=2}
-        SERVICE=holobox-camera.service
-        sudo bash -c "cat >/etc/systemd/system/$SERVICE" <<'UNIT'
-        [Unit]
-        Description=HoloBox Camera API Server
-        After=network.target
-        [Service]
-        Type=simple
-        User=pi
-        WorkingDirectory=/opt/holobox
-        ExecStart=python /opt/holobox/streamlined_camera_api.py --host 0.0.0.0 --port 8000
-        Restart=on-failure
-        RestartSec=5
-        [Install]
-        WantedBy=multi-user.target
-        UNIT
-        sudo systemctl daemon-reload
-        sudo systemctl enable --now "$SERVICE"
-        REG
-        chmod +x /opt/holobox/registerservice.sh
-        # ---------- end embedded scripts ----------
-
+        # helper
         cat <<'INFO' > /usr/local/bin/holobox-info
         #!/bin/bash
         echo "HoloBox System Information"
         echo "=========================="
         systemctl status holobox-camera.service --no-pager -l
         ip addr show wlan0 2>/dev/null || echo "wlan0 not available"
-        iwgetid 2>/dev/null || echo "Not connected to WiFi"
-        tail -n 10 /var/log/holobox/camera.log 2>/dev/null || true
+        nmcli -t -f NAME,DEVICE,TYPE,STATE connection show --active 2>/dev/null || true
+        iwgetid 2>/dev/null || echo "Not connected to WiFi (client)"
+        tail -n 20 /var/log/holobox/camera.log 2>/dev/null || true
         INFO
         chmod +x /usr/local/bin/holobox-info
 
@@ -258,19 +162,17 @@ jobs:
         ╔══════════════════════════════════════════╗
         ║             HoloBox System               ║
         ╚══════════════════════════════════════════╝
-        Web  : http://localhost:8000/static/
-        AP   : HoloBox-XXXXX (pass: holobox123)
+        Web  : http://localhost:8001/
+        AP   : HoloBox-XXXXX  (pass: holobox123)
+        AP IP: 192.168.4.1    (NM shared)
         MOTD
 
-        #rm -f /install_holobox.sh
-        #rm -rf /opt/holobox-install
+        # cleanup
         apt-get clean
         rm -rf /var/lib/apt/lists/*
         CHROOT
         sudo chmod +x /tmp/rpi-root/install_holobox.sh
         sudo chroot /tmp/rpi-root /install_holobox.sh
-
-
 
     - name: Unmount
       run: |
@@ -286,15 +188,15 @@ jobs:
     - name: Compress
       run: |
         DATE=$(date +%Y%m%d)
-        zip -9 holobox-sdcard-${DATE}.img.zip rpi-os-lite.img
-        ls -lh holobox-sdcard-${DATE}.img.zip
+        zip -9 "holobox-sdcard-${DATE}.img.zip" rpi-os-lite.img
+        ls -lh "holobox-sdcard-${DATE}.img.zip"
 
     - name: Release
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1
       with:
         files: holobox-sdcard-*.img.zip
-        body: HoloBox SD Card Image
+        body: HoloBox SD Card Image (NetworkManager AP)
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
