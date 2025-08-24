@@ -157,8 +157,19 @@ sudo systemctl status holobox-camera.service  # Check service status
 sudo tail -f /var/log/holobox/camera.log      # View logs
 ```
 
+### 
+
+```
 service holobox-camera status
 sudo systemctl stop holobox-camera.service
+```
+
+
+### detect if camera is available 
+
+```
+vcgencmd get_camera
+```
 
 
 ```
