@@ -1,0 +1,48 @@
+/* Minimal PyScript CSS for HoloBox offline use */
+
+py-script,
+py-repl {
+  display: block;
+}
+
+py-terminal {
+  display: block;
+  font-family: 'Courier New', monospace;
+  background-color: #000;
+  color: #fff;
+  padding: 10px;
+  border-radius: 4px;
+  margin: 10px 0;
+}
+
+.py-error {
+  color: #dc3545;
+  background-color: #f8d7da;
+  border: 1px solid #f5c6cb;
+  padding: 8px;
+  border-radius: 4px;
+  margin: 5px 0;
+}
+
+.py-warning {
+  color: #856404;
+  background-color: #fff3cd;
+  border: 1px solid #ffeaa7;
+  padding: 8px;
+  border-radius: 4px;
+  margin: 5px 0;
+}
+
+.py-loading {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 3px solid rgba(0,0,0,.3);
+  border-radius: 50%;
+  border-top-color: #007bff;
+  animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

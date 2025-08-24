@@ -35,7 +35,9 @@ pip install -r requirements.txt --break-system-packages
 
 ### Enhanced Web Interface (`static/index.html`)
 - **Real-time Streaming**: Display live camera feed
-- **PyScript Integration**: Client-side Python processing
+- **Offline Compatibility**: All CSS/JS dependencies stored locally for use without internet
+- **URL Redirection**: Root URL automatically redirects to the web interface
+- **Hologram Processing**: Both PyScript (online) and JavaScript (offline) implementations
 - **Fresnel Propagation**: Real-time hologram reconstruction
 - **Interactive Controls**: Adjustable parameters (wavelength, pixel size, distance)
 - **WiFi Management**: Scan networks, connect to WiFi, enable Access Point
@@ -139,11 +141,20 @@ Server runs on `https://localhost:8000`
 **Note**: Self-signed certificates will show browser warnings. This is normal for development/testing.
 
 ### 2. Access Web Interface
-- **Local**: Navigate to `http://localhost:8000/static/`
-- **Network**: Navigate to `http://[device-ip]:8000/static/`
-- **Access Point**: Navigate to `http://192.168.4.1:8000/static/`
+- **Local**: Navigate to `http://localhost:8000/` (auto-redirects to interface)
+- **Network**: Navigate to `http://[device-ip]:8000/` (auto-redirects to interface)
+- **Access Point**: Navigate to `http://192.168.4.1:8000/` or `https://192.168.4.1:8000/`
 
-### 3. WiFi Management
+**Note**: The root URL (`/`) automatically redirects to `/static/index.html` for user convenience.
+
+### 3. Offline Functionality
+The HoloBox web interface is fully functional without internet access:
+- **Local Dependencies**: All CSS, JavaScript, and processing libraries are stored locally
+- **Offline Processing**: JavaScript-based hologram processing when PyScript is unavailable
+- **Complete Interface**: Full camera control and WiFi management work offline
+- **Auto-redirect**: Convenient access via IP address alone
+
+### 4. WiFi Management
 Use the web interface to:
 - View current connection status
 - Scan for available networks

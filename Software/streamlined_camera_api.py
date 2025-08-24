@@ -168,7 +168,9 @@ def _jpeg(frame: np.ndarray) -> bytes:
 # API Endpoints
 @app.get("/")
 def root():
-    return {"message": "Streamlined Camera API", "camera_available": CAMERA_AVAILABLE}
+    """Redirect root URL to the main interface"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/static/index.html", status_code=301)
 
 @app.get("/snapshot", summary="Single JPEG frame")
 def snapshot() -> Response:
