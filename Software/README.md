@@ -183,6 +183,13 @@ vcgencmd get_camera
 ```
 
 
+### Example for connecting to a network called "MyWiFi"
+
+```
+sudo nmtui
+nmcli device wifi connect "openUC2" password "Wifi So You Can See Too"
+```
+
 ```
 ● holobox-camera.service - HoloBox Camera API Server
      Loaded: loaded (/etc/systemd/system/holobox-camera.service; enabled; preset: enabled)

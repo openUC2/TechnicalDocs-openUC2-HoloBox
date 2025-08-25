@@ -64,8 +64,18 @@ jobs:
         apt-get install -y --no-install-recommends \
           python3 python3-pip python3-dev build-essential pkg-config \
           hostapd dnsmasq rfkill iproute2 nftables \
-          wpasupplicant git curl wget python3-picamera2 \
+          wpasupplicant git curl wget \
           python3-prctl libcap2-dev libcap-dev
+        
+        # Install camera libraries with proper dependencies for Pi 5 compatibility
+        apt-get install -y --no-install-recommends \
+          libcamera0 libcamera-dev libcamera-apps \
+          libpisp0 libpisp-dev \
+          python3-picamera2
+        
+        # Update firmware for camera compatibility
+        apt-get install -y rpi-update
+        SKIP_WARNING=1 rpi-update || true
                           
 
         # --- User / auto-login / SSH (Bookworm boot path is /boot/firmware) ---
