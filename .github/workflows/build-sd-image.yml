@@ -68,15 +68,13 @@ jobs:
           python3-prctl libcap2-dev libcap-dev libcap2-bin
         
         # Install camera libraries optimized for Raspberry Pi Zero 2
-        # Pi Zero 2 uses modern libcamera but with simplified packages
+        # Keep libcamera minimal to avoid dependency conflicts
         apt-get install -y --no-install-recommends \
           libcamera0 libcamera-apps
         
-        apt-get install -y python3-picamera2
-
-        # Skip conflicting packages that cause dependency issues
-        # Install python3-picamera2 via pip later to avoid version conflicts
-        echo "Skipping apt python3-picamera2 due to version conflicts, will install via pip..." 
+        # Do NOT install python3-picamera2 from apt (causes libcamera conflicts)
+        # We'll install picamera2 via pip below
+        echo "Skipping apt python3-picamera2; will install via pip..." 
         
         # --- User / auto-login / SSH (Bookworm boot path is /boot/firmware) ---
         if ! id pi >/dev/null 2>&1; then useradd -m -s /bin/bash -G sudo pi; fi
@@ -106,7 +104,9 @@ jobs:
         pip install --break-system-packages \
           fastapi==0.110.0 uvicorn[standard]==0.29.0 numpy==1.26.4 \
           opencv-python-headless==4.10.0.82 pydantic==2.7.1 || true
-        pip install --force-reinstall --break-system-packages picamera2 || true
+        # Install picamera2 without deps to avoid rebuilding python-prctl/libcamera
+        pip install --break-system-packages --no-deps picamera2 || \
+          pip install --break-system-packages picamera2 || true
         pip install --break-system-packages numpy==1.26.4 || true
 
         mkdir -p /var/log/holobox
