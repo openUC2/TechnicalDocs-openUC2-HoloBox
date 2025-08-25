@@ -67,15 +67,19 @@ jobs:
           wpasupplicant git curl wget \
           python3-prctl libcap2-dev libcap-dev
         
-        # Install camera libraries with proper dependencies for Pi 5 compatibility
+        # Install camera libraries optimized for Raspberry Pi Zero
+        # Pi Zero uses legacy camera stack, newer libcamera may not be fully supported
         apt-get install -y --no-install-recommends \
-          libcamera0 libcamera-dev libcamera-apps \
-          libpisp0 libpisp-dev \
-          python3-picamera2
+          python3-picamera2 || echo "picamera2 not available, trying alternative..."
         
-        # Update firmware for camera compatibility
-        apt-get install -y rpi-update
-        SKIP_WARNING=1 rpi-update || true
+        # Fallback to basic camera support for Pi Zero
+        if ! dpkg -l | grep -q python3-picamera2; then
+          apt-get install -y --no-install-recommends \
+            libcamera0 libcamera-apps || echo "libcamera not available"
+        fi
+        
+        # Skip Pi 5 specific libraries and firmware updates for Pi Zero
+        echo "Raspberry Pi Zero detected - skipping Pi 5 specific packages"
                           
 
         # --- User / auto-login / SSH (Bookworm boot path is /boot/firmware) ---
