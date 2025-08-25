@@ -176,12 +176,56 @@ sudo systemctl stop holobox-camera.service
 ```
 
 
-### detect if camera is available 
+### Detect if camera is available 
 
-```
+```bash
+# Check camera detection
 vcgencmd get_camera
+
+# Test camera capture
+rpicam-still -o test.jpg --timeout 5000
+
+# List available cameras
+rpicam-still --list-cameras
 ```
 
+### Camera Troubleshooting (Pi Zero)
+
+**If you get timeout errors:**
+```
+ERROR: Camera frontend has timed out!
+ERROR: Please check that your camera sensor connector is attached securely.
+```
+
+**Hardware fixes:**
+1. **Power off** the Pi completely
+2. **Disconnect camera cable** and reconnect firmly
+3. **Check cable orientation** - contacts should face the correct direction
+4. **Try different cable** if available
+5. **Ensure camera is enabled** in raspi-config:
+   ```bash
+   sudo raspi-config
+   # Navigate to: Interface Options > Camera > Enable
+   ```
+
+**Software fixes:**
+1. **Increase GPU memory split:**
+   ```bash
+   sudo raspi-config
+   # Advanced Options > Memory Split > Set to 128
+   sudo reboot
+   ```
+
+2. **Check camera status:**
+   ```bash
+   vcgencmd get_camera  # Should show: supported=1 detected=1
+   ```
+
+3. **Alternative legacy camera test:**
+   ```bash
+   # If rpicam-still fails, try legacy commands
+   raspistill -o test.jpg -t 2000
+   ```
 
 ### Example for connecting to a network called "MyWiFi"
 

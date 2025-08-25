@@ -73,15 +73,8 @@ jobs:
           python3-picamera2 || echo "picamera2 not available, trying alternative..."
         
         # Fallback to basic camera support for Pi Zero
-        if ! dpkg -l | grep -q python3-picamera2; then
-          apt-get install -y --no-install-recommends \
-            libcamera0 libcamera-apps || echo "libcamera not available"
-        fi
+        apt-get install -y libcamera0 libcamera-apps 
         
-        # Skip Pi 5 specific libraries and firmware updates for Pi Zero
-        echo "Raspberry Pi Zero detected - skipping Pi 5 specific packages"
-                          
-
         # --- User / auto-login / SSH (Bookworm boot path is /boot/firmware) ---
         if ! id pi >/dev/null 2>&1; then useradd -m -s /bin/bash -G sudo pi; fi
         echo "pi:youseetoo" | chpasswd
