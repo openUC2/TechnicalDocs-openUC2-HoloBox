@@ -65,7 +65,7 @@ jobs:
           python3 python3-pip python3-dev build-essential pkg-config \
           hostapd dnsmasq rfkill iproute2 nftables \
           wpasupplicant git curl wget \
-          python3-prctl libcap2-dev libcap-dev
+          python3-prctl libcap2-dev libcap-dev libcap2-bin
         
         # Install camera libraries optimized for Raspberry Pi Zero 2
         # Pi Zero 2 uses modern libcamera but with simplified packages
