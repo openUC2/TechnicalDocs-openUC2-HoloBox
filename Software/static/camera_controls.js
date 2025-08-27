@@ -19,10 +19,53 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('enableAP').onclick = enableAccessPoint;
     document.getElementById('connectWifi').onclick = connectToWifi;
     
+    // Image orientation controls
+    document.getElementById('flipX').onchange = updateImageOrientation;
+    document.getElementById('flipY').onchange = updateImageOrientation;
+    document.getElementById('rotate90').onchange = updateImageOrientation;
+    
+    // Boundary box control
+    document.getElementById('showBoundaryBox').onchange = toggleBoundaryBox;
+    
+    // Initialize default IP and auto-suggest current device IP
+    initializeHostSuggestion();
+    
     // Initialize
     document.getElementById('status').textContent = 'Ready - Click Start Stream to begin';
     refreshWifiStatus(); // Load initial WiFi status
 });
+
+// Auto-suggest current device IP or use default
+const initializeHostSuggestion = () => {
+    const hostInput = document.getElementById('host');
+    
+    // If already has a value (from HTML), use it as default
+    if (hostInput.value && hostInput.value.trim()) {
+        baseUrl = hostInput.value.trim().replace(/\/+$/, '');
+        window.baseUrl = baseUrl;
+        return;
+    }
+    
+    // Try to detect current IP for better suggestion
+    const currentHost = window.location.hostname;
+    const currentPort = window.location.port;
+    const protocol = window.location.protocol;
+    
+    let suggestedUrl = 'http://192.168.4.1:8000'; // Default fallback
+    
+    // If we're not on localhost, suggest current host with port 8000
+    if (currentHost !== 'localhost' && currentHost !== '127.0.0.1') {
+        if (currentPort && currentPort !== '80' && currentPort !== '443') {
+            suggestedUrl = `${protocol}//${currentHost}:8000`;
+        } else {
+            suggestedUrl = `${protocol}//${currentHost}:8000`;
+        }
+    }
+    
+    hostInput.value = suggestedUrl;
+    baseUrl = suggestedUrl.replace(/\/+$/, '');
+    window.baseUrl = baseUrl;
+};
 
 const setHost = () => {
     const val = document.getElementById('host').value.trim();
@@ -35,8 +78,23 @@ const setHost = () => {
 const api = (path, opt = {}) => fetch(baseUrl + path, opt);
 
 const startStream = () => {
-    document.getElementById('stream').src = baseUrl + '/stream';
-    document.getElementById('status').textContent = 'Stream started';
+    const stream = document.getElementById('stream');
+    stream.src = baseUrl + '/stream';
+    
+    stream.onload = () => {
+        updateStreamAspectRatio();
+        if (!document.getElementById('boundary-box').classList.contains('hidden')) {
+            updateBoundaryBox();
+        }
+        document.getElementById('status').textContent = 'Stream started';
+    };
+    
+    // Handle window resize
+    window.addEventListener('resize', () => {
+        if (!document.getElementById('boundary-box').classList.contains('hidden')) {
+            updateBoundaryBox();
+        }
+    });
 };
 
 const stopStream = () => {
@@ -236,4 +294,101 @@ const enableAccessPoint = () => {
         document.getElementById('enableAP').disabled = false;
         document.getElementById('enableAP').textContent = 'Enable Access Point';
     });
+};
+
+// Image Orientation Controls
+const updateImageOrientation = () => {
+    const stream = document.getElementById('stream');
+    const flipX = document.getElementById('flipX').checked;
+    const flipY = document.getElementById('flipY').checked;
+    const rotate90 = document.getElementById('rotate90').checked;
+    
+    // Remove existing orientation classes
+    stream.classList.remove('flip-x', 'flip-y', 'rotate90');
+    
+    // Apply new orientation classes
+    if (flipX) stream.classList.add('flip-x');
+    if (flipY) stream.classList.add('flip-y');
+    if (rotate90) stream.classList.add('rotate90');
+    
+    // Update aspect ratio container to accommodate rotation
+    updateStreamAspectRatio();
+};
+
+// Boundary Box Control
+const toggleBoundaryBox = () => {
+    const boundaryBox = document.getElementById('boundary-box');
+    const showBox = document.getElementById('showBoundaryBox').checked;
+    
+    if (showBox) {
+        boundaryBox.classList.remove('hidden');
+        updateBoundaryBox();
+    } else {
+        boundaryBox.classList.add('hidden');
+    }
+};
+
+const updateBoundaryBox = () => {
+    const stream = document.getElementById('stream');
+    const boundaryBox = document.getElementById('boundary-box');
+    
+    if (!stream.naturalWidth || !stream.naturalHeight) {
+        // If image not loaded, try again in a bit
+        setTimeout(updateBoundaryBox, 100);
+        return;
+    }
+    
+    // Calculate the display size of the image
+    const displayWidth = stream.offsetWidth;
+    const displayHeight = stream.offsetHeight;
+    
+    // Define the processing region (e.g., center 80% of the image)
+    const regionWidth = displayWidth * 0.8;
+    const regionHeight = displayHeight * 0.8;
+    const left = (displayWidth - regionWidth) / 2;
+    const top = (displayHeight - regionHeight) / 2;
+    
+    // Position the boundary box
+    boundaryBox.style.left = left + 'px';
+    boundaryBox.style.top = top + 'px';
+    boundaryBox.style.width = regionWidth + 'px';
+    boundaryBox.style.height = regionHeight + 'px';
+};
+
+// Aspect Ratio Management
+const updateStreamAspectRatio = () => {
+    const stream = document.getElementById('stream');
+    
+    // Ensure the image maintains its aspect ratio
+    stream.style.height = 'auto';
+    stream.style.objectFit = 'contain';
+    
+    // Update boundary box if visible
+    if (!document.getElementById('boundary-box').classList.contains('hidden')) {
+        setTimeout(updateBoundaryBox, 50); // Small delay to let CSS apply
+    }
+};
+
+// Slider Controls with +/- buttons
+const adjustSlider = (sliderId, delta) => {
+    const slider = document.getElementById(sliderId);
+    const currentValue = parseFloat(slider.value);
+    const step = parseFloat(slider.step);
+    const min = parseFloat(slider.min);
+    const max = parseFloat(slider.max);
+    
+    // Calculate new value
+    let newValue = currentValue + delta;
+    
+    // Clamp to min/max bounds
+    newValue = Math.max(min, Math.min(max, newValue));
+    
+    // Round to step precision to avoid floating point errors
+    newValue = Math.round(newValue / step) * step;
+    
+    // Set the new value
+    slider.value = newValue;
+    
+    // Trigger the input event to update displays
+    slider.dispatchEvent(new Event('input'));
 };

@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="./css/pyscript-core.css" />
   <script type="module" src="./js/pyscript-core.js"></script>  
   <style>
-    #stream, #processed { max-width: 100%; border: 1px solid #ccc; margin: 10px; }
+    #stream, #processed { max-width: 100%; border: 1px solid #ccc; margin: 10px; transition: transform 0.3s ease; }
     .video-container { display: flex; justify-content: space-around; flex-wrap: wrap; }
     .controls-panel { background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; }
     .slider-container { margin: 10px 0; }
@@ -18,6 +18,60 @@
       background: #e7f1ff; 
       border: 1px solid #b3d9ff;
     }
+    
+    /* Image orientation transformations */
+    .flip-x { transform: scaleX(-1); }
+    .flip-y { transform: scaleY(-1); }
+    .flip-x.flip-y { transform: scale(-1, -1); }
+    .rotate90 { transform: rotate(90deg); }
+    .flip-x.rotate90 { transform: scaleX(-1) rotate(90deg); }
+    .flip-y.rotate90 { transform: scaleY(-1) rotate(90deg); }
+    .flip-x.flip-y.rotate90 { transform: scale(-1, -1) rotate(90deg); }
+    
+    /* Boundary box overlay */
+    .stream-container { position: relative; display: inline-block; }
+    .boundary-box { 
+      position: absolute; 
+      border: 2px solid #ff6b6b; 
+      pointer-events: none; 
+      z-index: 10;
+      box-shadow: 0 0 10px rgba(255, 107, 107, 0.3);
+    }
+    .boundary-box.hidden { display: none; }
+    
+    /* Mobile responsiveness improvements */
+    @media (max-width: 768px) {
+      .video-container { flex-direction: column; }
+      #stream, #processed { max-width: 100%; margin: 5px 0; }
+      .controls-panel { padding: 15px; margin: 15px 0; }
+      .slider-container { margin: 15px 0; }
+      
+      /* Larger touch targets for mobile */
+      .btn { min-height: 44px; }
+      .form-range { height: 6px; }
+      .form-range::-webkit-slider-thumb { height: 24px; width: 24px; }
+      .form-range::-moz-range-thumb { height: 24px; width: 24px; }
+      
+      /* Better spacing for sliders with buttons */
+      .d-flex.align-items-center.gap-2 { gap: 8px !important; }
+      .btn-sm { min-height: 36px; min-width: 36px; }
+    }
+    
+    /* Ensure images are responsive and maintain aspect ratio */
+    #stream { 
+      max-width: 100%; 
+      height: auto; 
+      object-fit: contain;
+      display: block;
+      margin: 0 auto;
+    }
+    
+    #processed {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin: 0 auto;
+    }
   </style>
 </head>
 <body class="bg-light">
@@ -25,7 +79,7 @@
 <nav class="navbar navbar-dark bg-dark px-3">
   <span class="navbar-brand">HoloBox Camera & Processing</span>
   <div class="d-flex">
-    <input id="host" class="form-control me-2" style="width:20rem" placeholder="http://localhost:8000 or https://localhost:8000">
+    <input id="host" class="form-control me-2" style="width:20rem" placeholder="http://192.168.4.1:8000" value="http://192.168.4.1:8000">
     <button id="setHost" class="btn btn-outline-light">Set API URL</button>
   </div>
 </nav>
@@ -36,7 +90,16 @@
   <div class="video-container">
     <div class="text-center">
       <h5>Original Camera Stream</h5>
-      <img id="stream" alt="Stream not running">
+      <div class="stream-container">
+        <img id="stream" alt="Stream not running">
+        <div id="boundary-box" class="boundary-box hidden"></div>
+      </div>
+      <div class="mt-2">
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="checkbox" id="showBoundaryBox">
+          <label class="form-check-label" for="showBoundaryBox">Show Processing Region</label>
+        </div>
+      </div>
     </div>
     <div class="text-center">
       <h5>Fresnel Propagated</h5>
@@ -71,6 +134,36 @@
         <a id="downloadLink" class="btn btn-outline-secondary d-none" download="capture.jpg">Download</a>
       </div>
     </div>
+    
+    <!-- Stream Performance Info -->
+    <div class="row g-3 mt-2">
+      <div class="col-12">
+        <div class="alert alert-info py-2 mb-0">
+          <small><strong>Stream Latency:</strong> Optimized for ~20 FPS. Latency depends on network conditions and Pi hardware capabilities.</small>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Image Orientation Controls -->
+    <div class="row g-3 mt-2">
+      <div class="col-12">
+        <h6 class="mb-2">Image Orientation</h6>
+        <div class="d-flex flex-wrap gap-3">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="flipX">
+            <label class="form-check-label" for="flipX">Flip X (Horizontal)</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="flipY">
+            <label class="form-check-label" for="flipY">Flip Y (Vertical)</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="rotate90">
+            <label class="form-check-label" for="rotate90">Rotate 90°</label>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Hologram Processing Controls -->
@@ -80,19 +173,31 @@
       <div class="col-md-4">
         <div class="slider-container">
           <label for="wavelength" class="form-label">Wavelength (nm): <span id="wavelength-value">440</span></label>
-          <input type="range" class="form-range" id="wavelength" min="380" max="700" value="440" step="10">
+          <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-sm btn-outline-secondary" onclick="adjustSlider('wavelength', -10)">−</button>
+            <input type="range" class="form-range" id="wavelength" min="380" max="700" value="440" step="10">
+            <button class="btn btn-sm btn-outline-secondary" onclick="adjustSlider('wavelength', 10)">+</button>
+          </div>
         </div>
       </div>
       <div class="col-md-4">
         <div class="slider-container">
           <label for="pixelsize" class="form-label">Pixel Size (µm): <span id="pixelsize-value">1.4</span></label>
-          <input type="range" class="form-range" id="pixelsize" min="0.5" max="5.0" value="1.4" step="0.1">
+          <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-sm btn-outline-secondary" onclick="adjustSlider('pixelsize', -0.1)">−</button>
+            <input type="range" class="form-range" id="pixelsize" min="0.5" max="5.0" value="1.4" step="0.1">
+            <button class="btn btn-sm btn-outline-secondary" onclick="adjustSlider('pixelsize', 0.1)">+</button>
+          </div>
         </div>
       </div>
       <div class="col-md-4">
         <div class="slider-container">
           <label for="dz" class="form-label">Distance (mm): <span id="dz-value">5.0</span></label>
-          <input type="range" class="form-range" id="dz" min="0.0" max="5.0" value="0.1" step="0.02">
+          <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-sm btn-outline-secondary" onclick="adjustSlider('dz', -0.02)">−</button>
+            <input type="range" class="form-range" id="dz" min="0.0" max="5.0" value="0.1" step="0.02">
+            <button class="btn btn-sm btn-outline-secondary" onclick="adjustSlider('dz', 0.02)">+</button>
+          </div>
         </div>
       </div>
     </div>
