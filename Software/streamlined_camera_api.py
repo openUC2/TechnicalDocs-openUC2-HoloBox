@@ -187,7 +187,7 @@ def stream():
                 b"\r\nContent-Type: image/jpeg\r\n\r\n" +
                 _jpeg(_capture()) + b"\r\n"
             )
-            time.sleep(0.05)  # ~20 FPS
+            time.sleep(0.033)  # ~30 FPS - optimized for low latency
     return StreamingResponse(
         gen(),
         media_type=f"multipart/x-mixed-replace; boundary={boundary.decode()}",

@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HoloBox Test - Offline Improvements Demo</title>
+    <link href="./assets/css/bootstrap-minimal.css" rel="stylesheet">
+    <style>
+        .demo-section { 
+            margin: 2rem 0; padding: 1rem; 
+            border: 1px solid #ddd; border-radius: 8px; 
+            background: #f9f9f9;
+        }
+        .mock-stream { 
+            width: 400px; height: 300px; background: #333; 
+            display: flex; align-items: center; justify-content: center; 
+            color: white; border: 2px solid #ccc; margin: 0 auto;
+            position: relative;
+        }
+        .boundary-box {
+            position: absolute; top: 20%; left: 20%; width: 60%; height: 60%;
+            border: 2px solid #ff0000; border-radius: 4px;
+            pointer-events: none; z-index: 10;
+        }
+        .slider-controls {
+            display: flex; align-items: center; gap: 5px; width: 100%;
+            margin: 10px 0;
+        }
+        .slider-btn {
+            min-width: 40px; height: 40px; padding: 0;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: bold; font-size: 18px;
+        }
+        .form-range {
+            flex: 1; margin: 0 10px;
+        }
+        .feature-list { list-style: none; padding: 0; }
+        .feature-list li { margin: 0.5rem 0; }
+        .feature-list li:before { 
+            content: "✅ "; margin-right: 0.5rem; 
+        }
+    </style>
+</head>
+<body class="bg-light">
+
+<nav class="navbar navbar-dark bg-dark px-3">
+    <span class="navbar-brand">HoloBox - Offline Improvements Demo</span>
+</nav>
+
+<div class="container py-4">
+    
+    <div class="demo-section">
+        <h3>✅ Offline Compatibility</h3>
+        <ul class="feature-list">
+            <li>All CSS and JavaScript assets now stored locally</li>
+            <li>No external CDN dependencies (Bootstrap, PyScript removed)</li>
+            <li>Fully functional without internet connection</li>
+        </ul>
+    </div>
+
+    <div class="demo-section">
+        <h3>✅ Boundary Box Feature</h3>
+        <div class="text-center">
+            <div class="mock-stream">
+                Mock Camera Stream
+                <div id="demoBox" class="boundary-box" style="display: block;"></div>
+            </div>
+            <div style="margin: 10px 0;">
+                <label style="margin-right: 15px;">
+                    <input type="checkbox" checked onchange="document.getElementById('demoBox').style.display = this.checked ? 'block' : 'none'"> 
+                    Show Processing Area
+                </label>
+                <button class="btn btn-sm btn-outline-primary" onclick="adjustDemoBoundary()">Adjust Area</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="demo-section">
+        <h3>✅ Default IP Address</h3>
+        <div class="row g-3">
+            <div class="col-auto">
+                <input id="demoHost" class="form-control" style="width:20rem" placeholder="192.168.4.1:8000" value="192.168.4.1:8000">
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-outline-light bg-dark text-light">Set API URL</button>
+            </div>
+        </div>
+        <small class="text-muted">Auto-suggests current device IP, defaults to Raspberry Pi AP mode</small>
+    </div>
+
+    <div class="demo-section">
+        <h3>✅ Enhanced Slider Controls</h3>
+        <p>Touch-friendly sliders with +/- buttons for precise control:</p>
+        
+        <div class="row">
+            <div class="col-md-4">
+                <label>Wavelength (nm): <span id="demo-wave-val">440</span></label>
+                <div class="slider-controls">
+                    <button type="button" class="btn btn-outline-primary slider-btn" onclick="adjustDemoSlider('demo-wave', -10)">−</button>
+                    <input type="range" class="form-range" id="demo-wave" min="380" max="700" value="440" step="10" 
+                           oninput="document.getElementById('demo-wave-val').textContent = this.value">
+                    <button type="button" class="btn btn-outline-primary slider-btn" onclick="adjustDemoSlider('demo-wave', 10)">+</button>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <label>Pixel Size (µm): <span id="demo-pixel-val">1.4</span></label>
+                <div class="slider-controls">
+                    <button type="button" class="btn btn-outline-primary slider-btn" onclick="adjustDemoSlider('demo-pixel', -0.1)">−</button>
+                    <input type="range" class="form-range" id="demo-pixel" min="0.5" max="5.0" value="1.4" step="0.1"
+                           oninput="document.getElementById('demo-pixel-val').textContent = parseFloat(this.value).toFixed(1)">
+                    <button type="button" class="btn btn-outline-primary slider-btn" onclick="adjustDemoSlider('demo-pixel', 0.1)">+</button>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <label>Distance (mm): <span id="demo-dist-val">0.1</span></label>
+                <div class="slider-controls">
+                    <button type="button" class="btn btn-outline-primary slider-btn" onclick="adjustDemoSlider('demo-dist', -0.02)">−</button>
+                    <input type="range" class="form-range" id="demo-dist" min="0.0" max="5.0" value="0.1" step="0.02"
+                           oninput="document.getElementById('demo-dist-val').textContent = parseFloat(this.value).toFixed(2)">
+                    <button type="button" class="btn btn-outline-primary slider-btn" onclick="adjustDemoSlider('demo-dist', 0.02)">+</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="demo-section">
+        <h3>✅ Image Orientation Controls</h3>
+        <div class="text-center">
+            <div class="mock-stream" style="width: 200px; height: 150px;">
+                <div id="demoImage" style="transition: transform 0.3s ease;">📷 Image</div>
+            </div>
+            <div style="margin: 10px 0; display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
+                <label style="cursor: pointer;">
+                    <input type="checkbox" onchange="updateDemoTransform()"> Flip X
+                </label>
+                <label style="cursor: pointer;">
+                    <input type="checkbox" onchange="updateDemoTransform()"> Flip Y
+                </label>
+                <label style="cursor: pointer;">
+                    <input type="checkbox" onchange="updateDemoTransform()"> Rotate 90°
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <div class="demo-section">
+        <h3>✅ Aspect Ratio & Mobile Optimization</h3>
+        <ul class="feature-list">
+            <li>Images maintain true aspect ratio with object-fit: contain</li>
+            <li>Responsive design optimized for tablets and phones</li>
+            <li>Touch-friendly button sizes (44px minimum)</li>
+            <li>Larger slider thumbs for touch interaction</li>
+        </ul>
+    </div>
+
+    <div class="demo-section">
+        <h3>📋 Implementation Summary</h3>
+        <div class="row">
+            <div class="col-md-6">
+                <h6>Files Modified:</h6>
+                <ul>
+                    <li><code>static/index.html</code> - Main interface</li>
+                    <li><code>static/camera_controls.js</code> - Enhanced controls</li>
+                </ul>
+            </div>
+            <div class="col-md-6">
+                <h6>Files Created:</h6>
+                <ul>
+                    <li><code>static/assets/css/bootstrap-minimal.css</code> - Offline CSS</li>
+                    <li><code>static/demo.html</code> - This demo page</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+function adjustDemoBoundary() {
+    const box = document.getElementById('demoBox');
+    const currentTop = parseInt(box.style.top) || 20;
+    
+    if (currentTop === 20) {
+        box.style.top = '30%'; box.style.left = '30%';
+        box.style.width = '40%'; box.style.height = '40%';
+    } else if (currentTop === 30) {
+        box.style.top = '35%'; box.style.left = '35%';
+        box.style.width = '30%'; box.style.height = '30%';
+    } else {
+        box.style.top = '20%'; box.style.left = '20%';
+        box.style.width = '60%'; box.style.height = '60%';
+    }
+}
+
+function adjustDemoSlider(sliderId, delta) {
+    const slider = document.getElementById(sliderId);
+    const newValue = parseFloat(slider.value) + delta;
+    const min = parseFloat(slider.min);
+    const max = parseFloat(slider.max);
+    
+    if (newValue >= min && newValue <= max) {
+        slider.value = newValue.toFixed(2);
+        slider.dispatchEvent(new Event('input'));
+    }
+}
+
+function updateDemoTransform() {
+    const flipX = document.querySelectorAll('#demoImage')[0].parentNode.parentNode.querySelectorAll('input[type="checkbox"]')[0].checked;
+    const flipY = document.querySelectorAll('#demoImage')[0].parentNode.parentNode.querySelectorAll('input[type="checkbox"]')[1].checked;
+    const rotate90 = document.querySelectorAll('#demoImage')[0].parentNode.parentNode.querySelectorAll('input[type="checkbox"]')[2].checked;
+    
+    const image = document.getElementById('demoImage');
+    let transform = '';
+    
+    if (flipX) transform += 'scaleX(-1) ';
+    if (flipY) transform += 'scaleY(-1) ';
+    if (rotate90) transform += 'rotate(90deg) ';
+    
+    image.style.transform = transform.trim();
+}
+</script>
+
+</body>
+</html>

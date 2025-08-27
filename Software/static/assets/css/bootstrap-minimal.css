@@ -1,0 +1,150 @@
+/* Minimal Bootstrap-compatible styles for offline use */
+
+/* Layout & Grid */
+.container-fluid { width: 100%; padding: 0 15px; }
+.container { max-width: 1200px; margin: 0 auto; padding: 0 15px; }
+.row { display: flex; flex-wrap: wrap; margin: 0 -15px; }
+.col-auto { flex: 0 0 auto; padding: 0 15px; }
+.col-12 { flex: 0 0 100%; padding: 0 15px; }
+.col-md-4 { flex: 0 0 33.33333%; padding: 0 15px; }
+.col-md-6 { flex: 0 0 50%; padding: 0 15px; }
+
+/* Spacing */
+.g-2 > * { margin: 0.5rem; }
+.g-3 > * { margin: 1rem; }
+.py-4 { padding-top: 1.5rem; padding-bottom: 1.5rem; }
+.px-3 { padding-left: 1rem; padding-right: 1rem; }
+.mt-2 { margin-top: 0.5rem; }
+.mt-3 { margin-top: 1rem; }
+.me-2 { margin-right: 0.5rem; }
+.mb-0 { margin-bottom: 0; }
+.mb-2 { margin-bottom: 0.5rem; }
+
+/* Colors */
+.bg-light { background-color: #f8f9fa; }
+.bg-dark { background-color: #212529; }
+.text-center { text-align: center; }
+.text-danger { color: #dc3545; }
+.text-success { color: #198754; }
+.text-warning { color: #ffc107; }
+.text-muted { color: #6c757d; }
+.text-secondary { color: #6c757d; }
+
+/* Navigation */
+.navbar { display: flex; align-items: center; padding: 0.5rem 1rem; }
+.navbar-dark { background-color: #212529; color: white; }
+.navbar-brand { font-size: 1.25rem; font-weight: bold; color: white; text-decoration: none; }
+.d-flex { display: flex; }
+.justify-content-between { justify-content: space-between; }
+.justify-content-space-around { justify-content: space-around; }
+.align-items-center { align-items: center; }
+.flex-wrap { flex-wrap: wrap; }
+
+/* Buttons */
+.btn { 
+  display: inline-block; padding: 0.375rem 0.75rem; margin: 0.125rem;
+  font-size: 1rem; line-height: 1.5; border-radius: 0.375rem; 
+  text-align: center; text-decoration: none; border: 1px solid transparent; 
+  cursor: pointer; transition: all 0.15s ease-in-out;
+}
+.btn-primary { background-color: #0d6efd; border-color: #0d6efd; color: white; }
+.btn-primary:hover { background-color: #0b5ed7; border-color: #0a58ca; }
+.btn-success { background-color: #198754; border-color: #198754; color: white; }
+.btn-success:hover { background-color: #157347; border-color: #146c43; }
+.btn-danger { background-color: #dc3545; border-color: #dc3545; color: white; }
+.btn-danger:hover { background-color: #c82333; border-color: #bd2130; }
+.btn-warning { background-color: #ffc107; border-color: #ffc107; color: #000; }
+.btn-warning:hover { background-color: #ffca2c; border-color: #ffc720; }
+.btn-info { background-color: #0dcaf0; border-color: #0dcaf0; color: #000; }
+.btn-info:hover { background-color: #31d2f2; border-color: #25cff2; }
+.btn-secondary { background-color: #6c757d; border-color: #6c757d; color: white; }
+.btn-secondary:hover { background-color: #5c636a; border-color: #565e64; }
+.btn-outline-light { border: 1px solid #f8f9fa; color: #f8f9fa; background: transparent; }
+.btn-outline-light:hover { background-color: #f8f9fa; color: #000; }
+.btn-outline-primary { border: 1px solid #0d6efd; color: #0d6efd; background: transparent; }
+.btn-outline-primary:hover { background-color: #0d6efd; color: white; }
+.btn-outline-secondary { border: 1px solid #6c757d; color: #6c757d; background: transparent; }
+.btn-outline-secondary:hover { background-color: #6c757d; color: white; }
+.btn-outline-warning { border: 1px solid #ffc107; color: #ffc107; background: transparent; }
+.btn-outline-warning:hover { background-color: #ffc107; color: #000; }
+.btn-sm { padding: 0.25rem 0.5rem; font-size: 0.875rem; }
+.w-100 { width: 100%; }
+
+/* Forms */
+.form-control { 
+  display: block; width: 100%; padding: 0.375rem 0.75rem; font-size: 1rem; 
+  line-height: 1.5; color: #212529; background-color: #fff; border: 1px solid #ced4da; 
+  border-radius: 0.375rem; transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+.form-control:focus { 
+  border-color: #86b7fe; outline: 0; box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25); 
+}
+.form-range { 
+  width: 100%; height: 1.5rem; padding: 0; background-color: transparent; 
+  appearance: none; -webkit-appearance: none;
+}
+.form-range::-webkit-slider-track { 
+  width: 100%; height: 0.5rem; background: #dee2e6; border-radius: 1rem; 
+}
+.form-range::-webkit-slider-thumb { 
+  appearance: none; width: 1rem; height: 1rem; border-radius: 1rem; 
+  background: #0d6efd; cursor: pointer; 
+}
+.form-range::-moz-range-track { 
+  width: 100%; height: 0.5rem; background: #dee2e6; border-radius: 1rem; border: none; 
+}
+.form-range::-moz-range-thumb { 
+  width: 1rem; height: 1rem; border-radius: 1rem; background: #0d6efd; 
+  cursor: pointer; border: none; 
+}
+.form-label { margin-bottom: 0.5rem; font-weight: 500; }
+.input-group { position: relative; display: flex; align-items: stretch; width: 100%; }
+.input-group-text { 
+  display: flex; align-items: center; padding: 0.375rem 0.75rem; font-size: 1rem; 
+  font-weight: 400; line-height: 1.5; color: #212529; text-align: center; 
+  background-color: #e9ecef; border: 1px solid #ced4da; border-radius: 0.375rem; 
+}
+.input-group > :not(:first-child) { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.input-group > :not(:last-child) { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+
+/* Cards */
+.card { 
+  position: relative; display: flex; flex-direction: column; background-color: #fff; 
+  border: 1px solid rgba(0,0,0,0.125); border-radius: 0.375rem; 
+}
+.card-header { 
+  padding: 0.5rem 1rem; margin-bottom: 0; background-color: rgba(0,0,0,0.03); 
+  border-bottom: 1px solid rgba(0,0,0,0.125); 
+}
+.card-body { flex: 1 1 auto; padding: 1rem; }
+
+/* Utility */
+.d-block { display: block; }
+.d-none { display: none; }
+.mx-auto { margin-left: auto; margin-right: auto; }
+.border-bottom { border-bottom: 1px solid #dee2e6; }
+
+/* Responsive behavior */
+@media (max-width: 767.98px) {
+  .col-md-4, .col-md-6 { flex: 0 0 100%; }
+  .row { margin: 0 -5px; }
+  .col-auto, .col-12, .col-md-4, .col-md-6 { padding: 0 5px; }
+  .container-fluid, .container { padding: 0 10px; }
+}
+
+/* Touch improvements */
+@media (pointer: coarse) {
+  .btn { 
+    min-height: 44px; min-width: 44px; 
+    touch-action: manipulation; 
+  }
+  .form-range { 
+    height: 2rem; 
+  }
+  .form-range::-webkit-slider-thumb { 
+    width: 1.5rem; height: 1.5rem; 
+  }
+  .form-range::-moz-range-thumb { 
+    width: 1.5rem; height: 1.5rem; 
+  }
+}
