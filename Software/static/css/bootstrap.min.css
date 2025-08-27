@@ -1,0 +1,100 @@
+/* Minimal Bootstrap-like CSS for HoloBox offline use */
+
+/* Reset and base styles */
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans","Liberation Sans",sans-serif;font-size:1rem;line-height:1.5;color:#212529;background-color:#fff}
+
+/* Container and grid */
+.container{max-width:1140px;margin:0 auto;padding:0 15px}
+.container-fluid{width:100%;padding:0 15px}
+.row{display:flex;flex-wrap:wrap;margin:0 -15px}
+.col-auto{flex:0 0 auto}
+.col-md-4{flex:0 0 33.333333%;padding:0 15px}
+.col-md-6{flex:0 0 50%;padding:0 15px}
+.col-12{flex:0 0 100%;padding:0 15px}
+
+/* Spacing */
+.py-4{padding-top:1.5rem!important;padding-bottom:1.5rem!important}
+.px-3{padding-left:1rem!important;padding-right:1rem!important}
+.mb-0{margin-bottom:0!important}
+.mb-2{margin-bottom:0.5rem!important}
+.mt-2{margin-top:0.5rem!important}
+.mt-3{margin-top:1rem!important}
+.me-2{margin-right:0.5rem!important}
+.g-2>*{padding:0.25rem}
+.g-3>*{padding:0.5rem}
+
+/* Navbar */
+.navbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;padding:0.5rem 1rem}
+.navbar-dark{background-color:#343a40!important}
+.navbar-brand{font-size:1.25rem;font-weight:700;color:#fff!important;text-decoration:none}
+.bg-dark{background-color:#343a40!important}
+.bg-light{background-color:#f8f9fa!important}
+
+/* Buttons */
+.btn{display:inline-block;font-weight:400;line-height:1.5;color:#212529;text-align:center;text-decoration:none;vertical-align:middle;cursor:pointer;border:1px solid transparent;padding:0.375rem 0.75rem;font-size:1rem;border-radius:0.25rem;transition:color .15s ease-in-out,background-color .15s ease-in-out,border-color .15s ease-in-out,box-shadow .15s ease-in-out}
+.btn:hover{color:#212529;text-decoration:none}
+.btn-primary{color:#fff;background-color:#0d6efd;border-color:#0d6efd}
+.btn-primary:hover{color:#fff;background-color:#0b5ed7;border-color:#0a58ca}
+.btn-success{color:#fff;background-color:#198754;border-color:#198754}
+.btn-success:hover{color:#fff;background-color:#157347;border-color:#146c43}
+.btn-danger{color:#fff;background-color:#dc3545;border-color:#dc3545}
+.btn-danger:hover{color:#fff;background-color:#bb2d3b;border-color:#b02a37}
+.btn-warning{color:#000;background-color:#ffc107;border-color:#ffc107}
+.btn-warning:hover{color:#000;background-color:#ffca2c;border-color:#ffc720}
+.btn-info{color:#000;background-color:#0dcaf0;border-color:#0dcaf0}
+.btn-info:hover{color:#000;background-color:#31d2f2;border-color:#25cff2}
+.btn-secondary{color:#fff;background-color:#6c757d;border-color:#6c757d}
+.btn-secondary:hover{color:#fff;background-color:#5c636a;border-color:#565e64}
+.btn-outline-light{color:#f8f9fa;border-color:#f8f9fa}
+.btn-outline-light:hover{color:#000;background-color:#f8f9fa;border-color:#f8f9fa}
+.btn-outline-primary{color:#0d6efd;border-color:#0d6efd}
+.btn-outline-primary:hover{color:#fff;background-color:#0d6efd;border-color:#0d6efd}
+.btn-outline-secondary{color:#6c757d;border-color:#6c757d}
+.btn-outline-secondary:hover{color:#fff;background-color:#6c757d;border-color:#6c757d}
+.btn-outline-warning{color:#ffc107;border-color:#ffc107}
+.btn-outline-warning:hover{color:#000;background-color:#ffc107;border-color:#ffc107}
+.btn-sm{padding:0.25rem 0.5rem;font-size:0.875rem}
+.w-100{width:100%!important}
+
+/* Forms */
+.form-control{display:block;width:100%;padding:0.375rem 0.75rem;font-size:1rem;font-weight:400;line-height:1.5;color:#212529;background-color:#fff;border:1px solid #ced4da;border-radius:0.25rem;transition:border-color .15s ease-in-out,box-shadow .15s ease-in-out}
+.form-control:focus{color:#212529;background-color:#fff;border-color:#86b7fe;outline:0;box-shadow:0 0 0 0.25rem rgba(13,110,253,.25)}
+.form-range{width:100%;height:1.5rem;padding:0;background-color:transparent;appearance:none}
+.form-range::-webkit-slider-thumb{width:1rem;height:1rem;margin-top:-0.25rem;background-color:#0d6efd;border:0;border-radius:1rem;appearance:none}
+.form-range::-moz-range-thumb{width:1rem;height:1rem;background-color:#0d6efd;border:0;border-radius:1rem;appearance:none}
+.form-label{margin-bottom:0.5rem;font-weight:500}
+
+/* Input groups */
+.input-group{position:relative;display:flex;flex-wrap:wrap;align-items:stretch;width:100%}
+.input-group>.form-control{position:relative;flex:1 1 auto;width:1%;min-width:0}
+.input-group-text{display:flex;align-items:center;padding:0.375rem 0.75rem;font-size:1rem;font-weight:400;line-height:1.5;color:#212529;text-align:center;white-space:nowrap;background-color:#e9ecef;border:1px solid #ced4da;border-radius:0.25rem}
+
+/* Cards */
+.card{position:relative;display:flex;flex-direction:column;min-width:0;background-color:#fff;border:1px solid rgba(0,0,0,.125);border-radius:0.25rem}
+.card-header{padding:0.5rem 1rem;margin-bottom:0;background-color:rgba(0,0,0,.03);border-bottom:1px solid rgba(0,0,0,.125)}
+.card-body{flex:1 1 auto;padding:1rem}
+
+/* Text alignment */
+.text-center{text-align:center!important}
+.text-muted{color:#6c757d!important}
+
+/* Display utilities */
+.d-flex{display:flex!important}
+.d-block{display:block!important}
+.d-none{display:none!important}
+.mx-auto{margin-left:auto!important;margin-right:auto!important}
+
+/* Responsive utilities */
+@media (min-width:768px){
+  .col-md-4{flex:0 0 33.333333%}
+  .col-md-6{flex:0 0 50%}
+}
+
+/* Additional styling for HoloBox specific elements */
+.video-container{display:flex;justify-content:space-around;flex-wrap:wrap}
+.controls-panel{background:#f8f9fa;padding:20px;border-radius:8px;margin:20px 0}
+.slider-container{margin:10px 0}
+.processing-status{padding:10px;margin:10px 0;border-radius:4px;background:#e7f1ff;border:1px solid #b3d9ff}
+
+#stream,#processed{max-width:100%;border:1px solid #ccc;margin:10px}

@@ -1,4 +1,4 @@
-name: Build HoloBox SD Card Image (NetworkManager AP)
+name: Build HoloBox SD Card Image
 
 on:
   push:
@@ -35,68 +35,82 @@ jobs:
         dd if=/dev/zero bs=1M count=2048 >> rpi-os-lite.img
         sudo losetup -P /dev/loop0 rpi-os-lite.img
         sudo parted /dev/loop0 resizepart 2 100%
-        sudo e2fsck -f -y -v /dev/loop0p2 || echo "e2fsck completed with warnings/errors, continuing..."
+        sudo e2fsck -f -y -v /dev/loop0p2 || echo "e2fsck warnings ignored"
         sudo resize2fs /dev/loop0p2
 
     - name: Mount / chroot
       run: |
         mkdir -p /tmp/rpi-root
         sudo mount /dev/loop0p2 /tmp/rpi-root
-        sudo mount /dev/loop0p1 /tmp/rpi-root/boot
+        sudo mkdir -p /tmp/rpi-root/boot/firmware
+        sudo mount /dev/loop0p1 /tmp/rpi-root/boot/firmware
         sudo cp /usr/bin/qemu-aarch64-static /tmp/rpi-root/usr/bin/
         sudo mount -t proc proc /tmp/rpi-root/proc
         sudo mount -t sysfs sysfs /tmp/rpi-root/sys
         sudo mount --bind /dev /tmp/rpi-root/dev
         sudo mount --bind /dev/pts /tmp/rpi-root/dev/pts
-
         sudo mkdir -p /tmp/rpi-root/opt/holobox-install
-        sudo cp -r Software/* /tmp/rpi-root/opt/holobox-install/
+        sudo cp -r Software/* /tmp/rpi-root/opt/holobox-install/ || true
 
-    - name: Install in chroot (NetworkManager AP)
+    - name: Install in chroot
       run: |
         cat <<'CHROOT' | sudo tee /tmp/rpi-root/install_holobox.sh
         #!/usr/bin/env bash
         set -e
 
-        # ensure DNS for chroot
+        export DEBIAN_FRONTEND=noninteractive
         echo "nameserver 8.8.8.8" > /etc/resolv.conf
-
         apt-get update
+        apt-get install -y python3 python3-pip hostapd dnsmasq iptables-persistent wpasupplicant git curl wget \
+                          build-essential libcap-dev pkg-config python3-dev python3-picamera2 
+
         apt-get install -y \
           python3 python3-pip python3-dev build-essential pkg-config \
-          python3-picamera2 \
-          wpasupplicant network-manager openssh-server git curl wget
+          hostapd dnsmasq   \
+          wpasupplicant git curl wget python3-picamera2 \
+            libcap-dev
 
-        # user 'pi'
-        useradd -m -s /bin/bash pi || true
-        usermod -aG sudo pi || true
+        apt-get install -y rfkill iproute2 nftables python3-prctl # libcap2-dev libcamera0 libcamera-apps
+        
+        # --- User / auto-login / SSH (Bookworm boot path is /boot/firmware) ---
+        if ! id pi >/dev/null 2>&1; then useradd -m -s /bin/bash -G sudo pi; fi
         echo "pi:youseetoo" | chpasswd
+        mkdir -p /etc/systemd/system/getty@tty1.service.d
+        cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf << 'AUTOLOGIN'
+        [Service]
+        ExecStart=
+        ExecStart=-/sbin/agetty --autologin pi --noclear %I $TERM
+        AUTOLOGIN
+        systemctl disable userconfig.service 2>/dev/null || true
+        systemctl mask userconfig.service 2>/dev/null || true
+        systemctl disable piwiz.service 2>/dev/null || true
+        systemctl mask piwiz.service 2>/dev/null || true
+        touch /boot/firmware/ssh
+        echo "pi:\$6\$rounds=656000\$YQKNpEXgsKpKhJoY\$u2LpKU3xd5JchlREtd/qXhBUOEIgM/gDp0tOk3gGnfEh76VjZcB6g7wXP2.7v3vA.T8u6pzOgKaFEaVZQMdtX0" > /boot/firmware/userconf.txt
 
-        # holobox files
+        # --- App install ---
         mkdir -p /opt/holobox
         chown pi:pi /opt/holobox
-        cp -r /opt/holobox-install/* /opt/holobox/ || true
-        chown -R pi:pi /opt/holobox
-        chmod +x /opt/holobox/*.sh || true
-
-        # python deps
-        cd /opt/holobox
+        if [ -d /opt/holobox-install ]; then
+          cp -r /opt/holobox-install/* /opt/holobox/ || true
+          chown -R pi:pi /opt/holobox
+          chmod +x /opt/holobox/*.sh || true
+        fi
+        cd /opt/holobox || true
         pip install --break-system-packages \
-          fastapi==0.110.0 uvicorn[standard]==0.29.0 \
-          numpy==1.26.4 opencv-python-headless==4.10.0.82 pydantic==2.7.1
-        pip install --break-system-packages --force-reinstall picamera2
-        pip install --break-system-packages numpy==1.26.4
+          fastapi==0.110.0 uvicorn[standard]==0.29.0 numpy==1.26.4 \
+          opencv-python-headless==4.10.0.82 pydantic==2.7.1 || true
+        # Install picamera2 without deps to avoid rebuilding python-prctl/libcamera
+        pip install picamera2 --force-reinstall --break-system-packages
+        pip install numpy==1.26.4 --break-system-packages
 
-        # logs
+
         mkdir -p /var/log/holobox
         chown pi:pi /var/log/holobox
-
-        # holobox service
         cat <<'UNIT' > /etc/systemd/system/holobox-camera.service
         [Unit]
         Description=HoloBox Camera API Server
         After=network.target
-
         [Service]
         Type=simple
         User=pi
@@ -106,70 +120,138 @@ jobs:
         RestartSec=5
         StandardOutput=append:/var/log/holobox/camera.log
         StandardError=append:/var/log/holobox/camera.log
-
         [Install]
         WantedBy=multi-user.target
         UNIT
-
-        systemctl daemon-reload
         systemctl enable holobox-camera.service
         systemctl enable ssh
 
-        # --- NetworkManager AP configuration (no hostapd/dnsmasq) ---
-        # make sure NM is enabled; avoid conflicts if hostapd/dnsmasq preinstalled
-        systemctl disable hostapd dnsmasq 2>/dev/null || true
-        systemctl mask hostapd dnsmasq 2>/dev/null || true
-        systemctl enable NetworkManager
+        # --- Make NetworkManager ignore wlan0 (critical for AP) ---
+        mkdir -p /etc/NetworkManager/conf.d
+        cat > /etc/NetworkManager/conf.d/99-unmanaged-wlan0.conf << 'NM'
+        [keyfile]
+        unmanaged-devices=interface-name:wlan0
+        NM
 
-        SSID="HoloBox-$(hostname | tail -c 5)"
-        PASS="holobox123"
-        IFACE="wlan0"
+        # --- Don’t let wpa_supplicant grab wlan0 while in AP mode ---
+        systemctl disable wpa_supplicant.service 2>/dev/null || true
+        systemctl mask wpa_supplicant.service 2>/dev/null || true
+        systemctl mask wpa_supplicant@wlan0.service 2>/dev/null || true
 
-        # create/replace AP connection
-        nmcli -t -f NAME connection show | grep -q '^holobox-ap$' && nmcli connection delete holobox-ap || true
-        nmcli connection add type wifi ifname "$IFACE" con-name holobox-ap ssid "$SSID"
-        nmcli connection modify holobox-ap \
-          802-11-wireless.mode ap \
-          802-11-wireless.band bg \
-          802-11-wireless.channel 7 \
-          wifi-sec.key-mgmt wpa-psk \
-          wifi-sec.psk "$PASS" \
-          ipv4.method shared \
-          ipv4.addresses 192.168.4.1/24 \
-          ipv4.gateway 192.168.4.1 \
-          ipv6.method ignore \
-          connection.autoconnect yes \
-          connection.autoconnect-priority 100
+        # --- SSID generator ---
+        cat <<'SSIDGEN' > /opt/holobox/generate_ssid.py
+        #!/usr/bin/env python3
+        import hashlib, os, sys
+        ADJ=["Bright","Clear","Focus","Sharp","Zoom","Light","Flash","Lens","Image","Photo","Pixel","Frame","View","Scope","Beam","Wave","Crystal","Prism","Filter","Mirror","Optic","Laser","Holo","Ray","Spectrum","Digital","Micro","Macro","Ultra","Super","Nano","Mini"]
+        NOUN=["Box","Cam","Lab","Scope","Lens","Beam","Wave","Light","Focus","View","Snap","Shot","Frame","Pixel","Image","Photo","Optic","Prism","Mirror","Filter","Ray","Laser","Holo","Spectrum","Micro","Macro","Unit","Device","System","Tool","Cube","Capsule","Pod"]
+        def mac(iface='wlan0'):
+            try: return open(f'/sys/class/net/{iface}/address').read().strip()
+            except: h=hashlib.md5(os.uname().nodename.encode()).hexdigest()[:12]; return ':'.join([h[i:i+2] for i in range(0,12,2)])
+        def gen(iface='wlan0'):
+            m=bytes.fromhex(mac(iface).replace(':','')); h=hashlib.sha256(m).digest()
+            return f"openUC2-{ADJ[((h[0]<<8)|h[1])%len(ADJ)]}-{NOUN[((h[2]<<8)|h[3])%len(NOUN)]}"
+        if __name__=='__main__': print(gen(sys.argv[1] if len(sys.argv)>1 else 'wlan0'))
+        SSIDGEN
+        chmod +x /opt/holobox/generate_ssid.py
+        SSID="$(/opt/holobox/generate_ssid.py wlan0 || echo openUC2-$(hostname | tail -c 5))"
+        PASSPHRASE="holobox123"
 
-        # ensure Wi-Fi radio isn't blocked at boot
-        nmcli radio wifi on || true
-        rfkill unblock wifi || true
+        # --- hostapd ---
+        mkdir -p /etc/hostapd
+        cat > /etc/hostapd/hostapd.conf <<EOF
+        interface=wlan0
+        driver=nl80211
+        ssid=${SSID}
+        hw_mode=g
+        channel=6
+        wmm_enabled=1
+        macaddr_acl=0
+        auth_algs=1
+        ignore_broadcast_ssid=0
+        wpa=2
+        wpa_passphrase=${PASSPHRASE}
+        wpa_key_mgmt=WPA-PSK
+        wpa_pairwise=TKIP
+        rsn_pairwise=CCMP
+        country_code=DK
+        ieee80211d=1
+        ieee80211n=1
+        EOF
+        echo 'DAEMON_CONF="/etc/hostapd/hostapd.conf"' > /etc/default/hostapd
 
-        # helper
+        # --- dnsmasq ---
+        mkdir -p /etc/dnsmasq.d
+        cat > /etc/dnsmasq.d/holobox-ap.conf <<'DNS'
+        interface=wlan0
+        bind-interfaces
+        dhcp-range=192.168.4.2,192.168.4.200,255.255.255.0,24h
+        domain=holobox.local
+        local=/holobox.local/
+        no-resolv
+        server=8.8.8.8
+        server=8.8.4.4
+        DNS
+
+        # --- IP forwarding + nftables NAT (no firewall commands at build time) ---
+        echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-holobox-ipforward.conf
+
+        cat > /etc/nftables.conf <<'NFT'
+        flush ruleset
+        table inet filter {
+          chain forward {
+            type filter hook forward priority 0;
+            policy drop;
+            iifname "wlan0" oifname "eth0" accept
+            iifname "eth0" oifname "wlan0" ct state related,established accept
+          }
+        }
+        table ip nat {
+          chain postrouting {
+            type nat hook postrouting priority 100;
+            oifname "eth0" masquerade
+          }
+        }
+        NFT
+        systemctl enable nftables
+
+        # --- Prepare wlan0 before hostapd/dnsmasq on boot ---
+        cat > /etc/systemd/system/holobox-hotspot.service <<'HOTSPOT'
+        [Unit]
+        Description=Prepare wlan0 for HoloBox AP
+        After=NetworkManager.service network-online.target
+        Wants=NetworkManager.service
+        Before=hostapd.service dnsmasq.service
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        ExecStart=/bin/bash -c 'rfkill unblock all || true'
+        ExecStart=/bin/bash -c 'nmcli dev set wlan0 managed no 2>/dev/null || true'
+        ExecStart=/bin/sleep 4
+        ExecStart=/bin/bash -c 'ip link set wlan0 down || true'
+        ExecStart=/bin/bash -c 'ip addr flush dev wlan0 || true'
+        ExecStart=/bin/bash -c 'ip addr add 192.168.4.1/24 dev wlan0 || true'
+        ExecStart=/bin/bash -c 'ip link set wlan0 up || true'
+        [Install]
+        WantedBy=multi-user.target
+        HOTSPOT
+        systemctl enable holobox-hotspot.service
+        systemctl enable hostapd
+        systemctl enable dnsmasq
+
+        # --- Info helper ---
         cat <<'INFO' > /usr/local/bin/holobox-info
         #!/bin/bash
         echo "HoloBox System Information"
         echo "=========================="
-        systemctl status holobox-camera.service --no-pager -l
-        ip addr show wlan0 2>/dev/null || echo "wlan0 not available"
-        nmcli -t -f NAME,DEVICE,TYPE,STATE connection show --active 2>/dev/null || true
-        iwgetid 2>/dev/null || echo "Not connected to WiFi (client)"
-        tail -n 20 /var/log/holobox/camera.log 2>/dev/null || true
+        systemctl is-active hostapd && echo "hostapd: active" || echo "hostapd: inactive"
+        systemctl is-active dnsmasq && echo "dnsmasq: active" || echo "dnsmasq: inactive"
+        systemctl is-active nftables && echo "nftables: active" || echo "nftables: inactive"
+        ip addr show wlan0 2>/dev/null | sed -n 's/^\s*inet\s\+\([0-9.\/]\+\).*/wlan0 IP: \1/p'
+        iw dev wlan0 info 2>/dev/null | sed -n 's/^\s\+ssid\ \+\(.*\)$/SSID: \1/p'
         INFO
         chmod +x /usr/local/bin/holobox-info
 
-        cat <<'MOTD' > /etc/motd
-        ╔══════════════════════════════════════════╗
-        ║             HoloBox System               ║
-        ╚══════════════════════════════════════════╝
-        Web  : http://localhost:8001/
-        AP   : HoloBox-XXXXX  (pass: holobox123)
-        AP IP: 192.168.4.1    (NM shared)
-        MOTD
-
-        # cleanup
-        apt-get clean
-        rm -rf /var/lib/apt/lists/*
+        systemctl daemon-reload
         CHROOT
         sudo chmod +x /tmp/rpi-root/install_holobox.sh
         sudo chroot /tmp/rpi-root /install_holobox.sh
@@ -181,22 +263,22 @@ jobs:
         sudo umount /tmp/rpi-root/dev || true
         sudo umount /tmp/rpi-root/sys || true
         sudo umount /tmp/rpi-root/proc || true
-        sudo umount /tmp/rpi-root/boot || true
+        sudo umount /tmp/rpi-root/boot/firmware || true
         sudo umount /tmp/rpi-root || true
         sudo losetup -d /dev/loop0
 
     - name: Compress
       run: |
         DATE=$(date +%Y%m%d)
-        zip -9 "holobox-sdcard-${DATE}.img.zip" rpi-os-lite.img
-        ls -lh "holobox-sdcard-${DATE}.img.zip"
+        zip -9 holobox-sdcard-${DATE}.img.zip rpi-os-lite.img
+        ls -lh holobox-sdcard-${DATE}.img.zip
 
     - name: Release
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1
       with:
         files: holobox-sdcard-*.img.zip
-        body: HoloBox SD Card Image (NetworkManager AP)
+        body: HoloBox SD Card Image
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

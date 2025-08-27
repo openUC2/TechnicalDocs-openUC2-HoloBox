@@ -190,7 +190,7 @@ cat > /etc/motd << 'EOF'
 Welcome to the HoloBox SD Card Image!
 
 🌐 Web Interface: http://localhost:8000/static/
-📱 Access Point: Connect to HoloBox-XXXXX (password: holobox123)
+📱 Access Point: Connect to openUC2-XXXXX-YYYYY (password: holobox123)
 🔗 Gateway IP: http://192.168.4.1:8000/static/
 
 💡 Commands:
