@@ -23,10 +23,26 @@
     .flip-x { transform: scaleX(-1); }
     .flip-y { transform: scaleY(-1); }
     .flip-x.flip-y { transform: scale(-1, -1); }
+    
+    .rotate0 { transform: rotate(0deg); }
     .rotate90 { transform: rotate(90deg); }
+    .rotate180 { transform: rotate(180deg); }
+    .rotate270 { transform: rotate(270deg); }
+    
+    .flip-x.rotate0 { transform: scaleX(-1) rotate(0deg); }
     .flip-x.rotate90 { transform: scaleX(-1) rotate(90deg); }
+    .flip-x.rotate180 { transform: scaleX(-1) rotate(180deg); }
+    .flip-x.rotate270 { transform: scaleX(-1) rotate(270deg); }
+    
+    .flip-y.rotate0 { transform: scaleY(-1) rotate(0deg); }
     .flip-y.rotate90 { transform: scaleY(-1) rotate(90deg); }
+    .flip-y.rotate180 { transform: scaleY(-1) rotate(180deg); }
+    .flip-y.rotate270 { transform: scaleY(-1) rotate(270deg); }
+    
+    .flip-x.flip-y.rotate0 { transform: scale(-1, -1) rotate(0deg); }
     .flip-x.flip-y.rotate90 { transform: scale(-1, -1) rotate(90deg); }
+    .flip-x.flip-y.rotate180 { transform: scale(-1, -1) rotate(180deg); }
+    .flip-x.flip-y.rotate270 { transform: scale(-1, -1) rotate(270deg); }
     
     /* Boundary box overlay */
     .stream-container { position: relative; display: inline-block; }
@@ -79,8 +95,8 @@
 <nav class="navbar navbar-dark bg-dark px-3">
   <span class="navbar-brand">HoloBox Camera & Processing</span>
   <div class="d-flex">
-    <input id="host" class="form-control me-2" style="width:20rem" placeholder="http://192.168.4.1:8000" value="http://192.168.4.1:8000">
-    <button id="setHost" class="btn btn-outline-light">Set API URL</button>
+    <input id="host" class="form-control me-2" style="width:20rem" placeholder="Auto-detected" readonly>
+    <small class="text-light align-self-center ms-2">URL auto-detected from browser</small>
   </div>
 </nav>
 
@@ -146,7 +162,7 @@
     
     <!-- Image Orientation Controls -->
     <div class="row g-3 mt-2">
-      <div class="col-12">
+      <div class="col-md-6">
         <h6 class="mb-2">Image Orientation</h6>
         <div class="d-flex flex-wrap gap-3">
           <div class="form-check">
@@ -157,10 +173,35 @@
             <input class="form-check-input" type="checkbox" id="flipY">
             <label class="form-check-label" for="flipY">Flip Y (Vertical)</label>
           </div>
-          <div class="form-check">
-            <input class="form-check-input" type="checkbox" id="rotate90">
-            <label class="form-check-label" for="rotate90">Rotate 90°</label>
-          </div>
+        </div>
+        <div class="mt-2">
+          <label class="form-label">Rotation:</label>
+          <select class="form-select" id="rotationAngle">
+            <option value="0">0° (No Rotation)</option>
+            <option value="90">90° (Quarter Turn)</option>
+            <option value="180">180° (Half Turn)</option>
+            <option value="270">270° (Three Quarters)</option>
+          </select>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <h6 class="mb-2">Processing Options</h6>
+        <div class="mb-2">
+          <label class="form-label">ROI Size (pixels):</label>
+          <select class="form-select" id="roiSize">
+            <option value="128">128x128</option>
+            <option value="256" selected>256x256</option>
+            <option value="512">512x512</option>
+            <option value="1024">1024x1024</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Color Channel:</label>
+          <select class="form-select" id="colorChannel">
+            <option value="red">Red Channel</option>
+            <option value="green" selected>Green Channel</option>
+            <option value="blue">Blue Channel</option>
+          </select>
         </div>
       </div>
     </div>

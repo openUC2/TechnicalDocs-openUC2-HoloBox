@@ -6,7 +6,6 @@ window.baseUrl = baseUrl;
 
 document.addEventListener('DOMContentLoaded', function() {
     // Set up event listeners once DOM is loaded
-    document.getElementById('setHost').onclick = setHost;
     document.getElementById('startBtn').onclick = startStream;
     document.getElementById('stopBtn').onclick = stopStream;
     document.getElementById('setExposure').onclick = setExposure;
@@ -22,57 +21,45 @@ document.addEventListener('DOMContentLoaded', function() {
     // Image orientation controls
     document.getElementById('flipX').onchange = updateImageOrientation;
     document.getElementById('flipY').onchange = updateImageOrientation;
-    document.getElementById('rotate90').onchange = updateImageOrientation;
+    document.getElementById('rotationAngle').onchange = updateImageOrientation;
+    
+    // Processing options
+    document.getElementById('roiSize').onchange = updateBoundaryBox;
+    document.getElementById('colorChannel').onchange = updateProcessingSettings;
     
     // Boundary box control
     document.getElementById('showBoundaryBox').onchange = toggleBoundaryBox;
     
-    // Initialize default IP and auto-suggest current device IP
-    initializeHostSuggestion();
+    // Auto-detect URL from browser location (no manual input needed)
+    initializeAutoDetectedUrl();
     
     // Initialize
     document.getElementById('status').textContent = 'Ready - Click Start Stream to begin';
     refreshWifiStatus(); // Load initial WiFi status
 });
 
-// Auto-suggest current device IP or use default
-const initializeHostSuggestion = () => {
+// Auto-detect URL from browser location 
+const initializeAutoDetectedUrl = () => {
     const hostInput = document.getElementById('host');
-    
-    // If already has a value (from HTML), use it as default
-    if (hostInput.value && hostInput.value.trim()) {
-        baseUrl = hostInput.value.trim().replace(/\/+$/, '');
-        window.baseUrl = baseUrl;
-        return;
-    }
-    
-    // Try to detect current IP for better suggestion
     const currentHost = window.location.hostname;
     const currentPort = window.location.port;
-    const protocol = window.location.protocol;
     
-    let suggestedUrl = 'http://192.168.4.1:8000'; // Default fallback
+    // Always use HTTP as requested by user
+    let detectedUrl;
     
-    // If we're not on localhost, suggest current host with port 8000
+    // If we're accessing via specific host, use current host with port 8000
     if (currentHost !== 'localhost' && currentHost !== '127.0.0.1') {
-        if (currentPort && currentPort !== '80' && currentPort !== '443') {
-            suggestedUrl = `${protocol}//${currentHost}:8000`;
-        } else {
-            suggestedUrl = `${protocol}//${currentHost}:8000`;
-        }
+        detectedUrl = `http://${currentHost}:8000`;
+    } else {
+        // Default fallback for local development
+        detectedUrl = 'http://192.168.4.1:8000';
     }
     
-    hostInput.value = suggestedUrl;
-    baseUrl = suggestedUrl.replace(/\/+$/, '');
+    hostInput.value = detectedUrl;
+    baseUrl = detectedUrl.replace(/\/+$/, '');
     window.baseUrl = baseUrl;
-};
-
-const setHost = () => {
-    const val = document.getElementById('host').value.trim();
-    if (val) {
-        baseUrl = val.replace(/\/+$/, '');
-        window.baseUrl = baseUrl;  // Update global reference
-    }
+    
+    console.log('Auto-detected API URL:', baseUrl);
 };
 
 const api = (path, opt = {}) => fetch(baseUrl + path, opt);
@@ -301,18 +288,23 @@ const updateImageOrientation = () => {
     const stream = document.getElementById('stream');
     const flipX = document.getElementById('flipX').checked;
     const flipY = document.getElementById('flipY').checked;
-    const rotate90 = document.getElementById('rotate90').checked;
+    const rotationAngle = document.getElementById('rotationAngle').value;
     
     // Remove existing orientation classes
-    stream.classList.remove('flip-x', 'flip-y', 'rotate90');
+    stream.classList.remove('flip-x', 'flip-y', 'rotate0', 'rotate90', 'rotate180', 'rotate270');
     
-    // Apply new orientation classes
+    // Apply flip classes
     if (flipX) stream.classList.add('flip-x');
     if (flipY) stream.classList.add('flip-y');
-    if (rotate90) stream.classList.add('rotate90');
+    
+    // Apply rotation class
+    stream.classList.add(`rotate${rotationAngle}`);
     
     // Update aspect ratio container to accommodate rotation
     updateStreamAspectRatio();
+    
+    // Send orientation settings to processing backend
+    updateProcessingSettings();
 };
 
 // Boundary Box Control
@@ -331,6 +323,7 @@ const toggleBoundaryBox = () => {
 const updateBoundaryBox = () => {
     const stream = document.getElementById('stream');
     const boundaryBox = document.getElementById('boundary-box');
+    const roiSize = parseInt(document.getElementById('roiSize').value);
     
     if (!stream.naturalWidth || !stream.naturalHeight) {
         // If image not loaded, try again in a bit
@@ -342,17 +335,26 @@ const updateBoundaryBox = () => {
     const displayWidth = stream.offsetWidth;
     const displayHeight = stream.offsetHeight;
     
-    // Define the processing region (e.g., center 80% of the image)
-    const regionWidth = displayWidth * 0.8;
-    const regionHeight = displayHeight * 0.8;
-    const left = (displayWidth - regionWidth) / 2;
-    const top = (displayHeight - regionHeight) / 2;
+    // Calculate scale factors
+    const scaleX = displayWidth / stream.naturalWidth;
+    const scaleY = displayHeight / stream.naturalHeight;
+    const scale = Math.min(scaleX, scaleY); // Use smaller scale to fit within container
     
-    // Position the boundary box
+    // Calculate square ROI size in display pixels
+    const roiDisplaySize = roiSize * scale;
+    
+    // Center the square ROI
+    const left = (displayWidth - roiDisplaySize) / 2;
+    const top = (displayHeight - roiDisplaySize) / 2;
+    
+    // Position the boundary box (square)
     boundaryBox.style.left = left + 'px';
     boundaryBox.style.top = top + 'px';
-    boundaryBox.style.width = regionWidth + 'px';
-    boundaryBox.style.height = regionHeight + 'px';
+    boundaryBox.style.width = roiDisplaySize + 'px';
+    boundaryBox.style.height = roiDisplaySize + 'px';
+    
+    // Update processing settings to reflect ROI change
+    updateProcessingSettings();
 };
 
 // Aspect Ratio Management
@@ -391,4 +393,48 @@ const adjustSlider = (sliderId, delta) => {
     
     // Trigger the input event to update displays
     slider.dispatchEvent(new Event('input'));
+};
+
+// Processing Settings Update Function
+const updateProcessingSettings = () => {
+    // Get current settings
+    const flipX = document.getElementById('flipX').checked;
+    const flipY = document.getElementById('flipY').checked;
+    const rotationAngle = parseInt(document.getElementById('rotationAngle').value);
+    const roiSize = parseInt(document.getElementById('roiSize').value);
+    const colorChannel = document.getElementById('colorChannel').value;
+    
+    const settings = {
+        orientation: {
+            flipX: flipX,
+            flipY: flipY, 
+            rotation: rotationAngle
+        },
+        roi: {
+            size: roiSize,
+            centerX: 0.5, // Always center for now
+            centerY: 0.5
+        },
+        processing: {
+            colorChannel: colorChannel
+        }
+    };
+    
+    console.log('Updating processing settings:', settings);
+    
+    // Update hologram processing if available
+    if (typeof window.updateHologramProcessingSettings === 'function') {
+        window.updateHologramProcessingSettings(settings);
+    }
+    
+    // Send to backend (if available)
+    api('/processing/settings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(settings)
+    }).then(r => r.json()).then(data => {
+        console.log('Processing settings updated:', data);
+    }).catch(err => {
+        console.warn('Could not update backend processing settings (offline mode):', err);
+    });
 };
