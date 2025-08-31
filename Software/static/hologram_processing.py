@@ -1,6 +1,6 @@
 import numpy as np
 from js import document, console, ImageData, Uint8ClampedArray, setInterval, clearInterval
-from pyodide.ffi import create_proxy
+from pyodide.ffi import to_js
 import asyncio
 
 # Global variables
@@ -10,6 +10,8 @@ current_wavelength = 440e-9  # nm to m
 current_pixelsize = 1.4e-6   # µm to m  
 current_dz = 0.005           # mm to m
 debug_mode = True            # Enable detailed debugging
+
+console.log("🔧 Starting PyScript hologram processing setup...")
 
 def abssqr(x):
     """Calculate intensity (what a detector sees)"""
@@ -74,41 +76,131 @@ def apply_image_transformations(image, flip_x=False, flip_y=False, rotation=0):
     
     return image
 
-def process_image_data(image_data, width, height):
-    """Process image data through Fresnel propagation"""
+def process_image_for_hologram(width=256, height=256):
+    """Process image data through Fresnel propagation using direct canvas access"""
     try:
         if debug_mode:
-            console.log(f"Debug: Starting process_image_data with width={width}, height={height}")
+            console.log(f"Debug: Starting hologram processing with size {width}x{height}")
+        
+        # Try to get image from camera stream canvas
+        stream_canvas = document.getElementById('stream')
+        
+        if stream_canvas and hasattr(stream_canvas, 'getContext'):
+            # Create temporary canvas to get image data
+            temp_canvas = document.createElement('canvas')
+            temp_ctx = temp_canvas.getContext('2d')
+            
+            # Set canvas size
+            temp_canvas.width = width
+            temp_canvas.height = height
+            
+            # Draw from stream canvas or create test pattern
+            try:
+                temp_ctx.drawImage(stream_canvas, 0, 0, width, height)
+                image_data = temp_ctx.getImageData(0, 0, width, height)
+                
+                if debug_mode:
+                    console.log("Debug: Got image data from camera stream")
+                    
+            except Exception as e:
+                if debug_mode:
+                    console.log(f"Debug: Failed to get camera image, creating test pattern: {e}")
+                
+                # Create synthetic test pattern (interference-like)
+                test_img = np.zeros((height, width, 4), dtype=np.uint8)
+                
+                # Create interference pattern for testing
+                y, x = np.mgrid[0:height, 0:width]
+                pattern1 = np.sin(2 * np.pi * x / 20) * np.sin(2 * np.pi * y / 20)
+                pattern2 = np.sin(2 * np.pi * x / 15 + np.pi/4) * np.sin(2 * np.pi * y / 15 + np.pi/4)
+                interference = (pattern1 + pattern2 + 2) / 4 * 255
+                
+                test_img[:, :, 0] = interference.astype(np.uint8)
+                test_img[:, :, 1] = interference.astype(np.uint8)
+                test_img[:, :, 2] = interference.astype(np.uint8)
+                test_img[:, :, 3] = 255
+                
+                # Convert to image data
+                js_array = to_js(test_img.flatten().tolist())
+                image_data = temp_ctx.createImageData(width, height)
+                image_data.data.set(js_array)
+        
+        else:
+            if debug_mode:
+                console.log("Debug: No stream canvas found, creating test pattern")
+            
+            # Create synthetic test pattern if no canvas
+            test_img = np.zeros((height, width, 4), dtype=np.uint8)
+            
+            # Create interference pattern for testing
+            y, x = np.mgrid[0:height, 0:width]
+            pattern1 = np.sin(2 * np.pi * x / 20) * np.sin(2 * np.pi * y / 20)
+            pattern2 = np.sin(2 * np.pi * x / 15 + np.pi/4) * np.sin(2 * np.pi * y / 15 + np.pi/4)
+            interference = (pattern1 + pattern2 + 2) / 4 * 255
+            
+            test_img[:, :, 0] = interference.astype(np.uint8)
+            test_img[:, :, 1] = interference.astype(np.uint8)
+            test_img[:, :, 2] = interference.astype(np.uint8)
+            test_img[:, :, 3] = 255
+            
+            # Convert to image data
+            js_array = to_js(test_img.flatten().tolist())
+            temp_canvas = document.createElement('canvas')
+            temp_ctx = temp_canvas.getContext('2d')
+            temp_canvas.width = width
+            temp_canvas.height = height
+            image_data = temp_ctx.createImageData(width, height)
+            image_data.data.set(js_array)
         
         # Convert image data to numpy array
-        # ImageData is in RGBA format
-        img_array = np.array(image_data).reshape((height, width, 4)).copy()
+        img_array = np.array(image_data.data).reshape((height, width, 4))
         
         if debug_mode:
             console.log(f"Debug: Image array shape: {img_array.shape}")
         
-        # Convert to grayscale and normalize
-        gray = img_array[:, :, 0] * 0.299 + img_array[:, :, 1] * 0.587 + img_array[:, :, 2] * 0.114
-        gray = gray / 255.0
-        
-        # Get transformation settings if available
+        # Get settings from the interface
         flip_x = False
         flip_y = False
         rotation = 0
-        roi_size = min(256, min(height, width))  # default
+        roi_size = min(256, min(height, width))
+        color_channel = 'green'  # default
         
-        if hasattr(window, 'hologramSettings'):
-            settings = window.hologramSettings
-            if 'orientation' in settings:
-                flip_x = settings['orientation'].get('flipX', False)
-                flip_y = settings['orientation'].get('flipY', False)
-                rotation = settings['orientation'].get('rotation', 0)
-            if 'roi' in settings:
-                roi_size = min(settings['roi'].get('size', roi_size), min(height, width))
+        # Try to get settings from the interface elements
+        try:
+            flip_x_elem = document.getElementById('flipX')
+            if flip_x_elem:
+                flip_x = flip_x_elem.checked
+                
+            flip_y_elem = document.getElementById('flipY')
+            if flip_y_elem:
+                flip_y = flip_y_elem.checked
+                
+            rotation_elem = document.getElementById('rotation')
+            if rotation_elem:
+                rotation = int(rotation_elem.value)
+                
+            roi_elem = document.getElementById('roiSize')
+            if roi_elem:
+                roi_size = int(roi_elem.value)
+                
+            channel_elem = document.getElementById('colorChannel')
+            if channel_elem:
+                color_channel = channel_elem.value
+                
+        except Exception as e:
+            if debug_mode:
+                console.log(f"Debug: Could not read settings from interface: {e}")
         
         if debug_mode:
-            console.log(f"Debug: Using transformations - flipX: {flip_x}, flipY: {flip_y}, rotation: {rotation}")
-            console.log(f"Debug: ROI size: {roi_size}")
+            console.log(f"Debug: Settings - flipX: {flip_x}, flipY: {flip_y}, rotation: {rotation}, ROI: {roi_size}, channel: {color_channel}")
+        
+        # Extract color channel
+        if color_channel == 'red':
+            gray = img_array[:, :, 0].astype(float) / 255.0
+        elif color_channel == 'blue':
+            gray = img_array[:, :, 2].astype(float) / 255.0
+        else:  # green or default
+            gray = img_array[:, :, 1].astype(float) / 255.0
         
         # Apply transformations to the full image first
         transformed = apply_image_transformations(gray, flip_x, flip_y, rotation)
@@ -118,218 +210,93 @@ def process_image_data(image_data, width, height):
         
         # Extract square ROI from center after transformations
         t_height, t_width = transformed.shape
-        start_y = (t_height - roi_size) // 2
-        start_x = (t_width - roi_size) // 2
-        cropped = transformed[start_y:start_y + roi_size, start_x:start_x + roi_size]
+        start_y = max(0, (t_height - roi_size) // 2)
+        start_x = max(0, (t_width - roi_size) // 2)
+        end_y = min(t_height, start_y + roi_size)
+        end_x = min(t_width, start_x + roi_size)
+        
+        cropped = transformed[start_y:end_y, start_x:end_x]
         
         if debug_mode:
             console.log(f"Debug: Cropped ROI shape: {cropped.shape}")
         
-        # Estimate amplitude from intensity
-        amplitude = np.sqrt(cropped)
-        
-        if debug_mode:
-            console.log(f"Debug: Amplitude shape: {amplitude.shape}")
+        # Estimate amplitude from intensity (assume sqrt relationship)
+        amplitude = np.sqrt(np.abs(cropped))
         
         # Apply Fresnel propagation
         propagated = fresnel_propagator(amplitude, current_pixelsize, current_wavelength, current_dz)
         
-        if debug_mode:
-            console.log(f"Debug: Propagated shape: {propagated.shape}")
-        
         # Calculate intensity
         intensity = abssqr(propagated)
         
-        if debug_mode:
-            console.log(f"Debug: Intensity shape: {intensity.shape}")
-        
         # Normalize for display
-        intensity = (intensity - np.min(intensity)) / (np.max(intensity) - np.min(intensity))
+        if np.max(intensity) > np.min(intensity):
+            intensity = (intensity - np.min(intensity)) / (np.max(intensity) - np.min(intensity))
         intensity = (intensity * 255).astype(np.uint8)
         
         if debug_mode:
-            console.log(f"Debug: Normalized intensity shape: {intensity.shape}")
+            console.log(f"Debug: Final intensity shape: {intensity.shape}")
         
-        # For processed output, maintain square aspect ratio
-        # Use the smaller dimension to create a square output
-        output_size = min(height, width)
-        
-        # Resize the intensity to square output
-        if intensity.shape[0] != output_size or intensity.shape[1] != output_size:
-            if debug_mode:
-                console.log(f"Debug: Resizing from {intensity.shape} to ({output_size}, {output_size}) for square output")
-            
-            # Simple nearest neighbor interpolation to square
-            y_new = np.linspace(0, intensity.shape[0] - 1, output_size)
-            x_new = np.linspace(0, intensity.shape[1] - 1, output_size)
-            
-            y_indices = np.round(y_new).astype(int)
-            x_indices = np.round(x_new).astype(int)
-            
-            # Ensure indices are within bounds
-            y_indices = np.clip(y_indices, 0, intensity.shape[0] - 1)
-            x_indices = np.clip(x_indices, 0, intensity.shape[1] - 1)
-            
-            # Create meshgrid and resize to square
-            Y, X = np.meshgrid(y_indices, x_indices, indexing='ij')
-            intensity = intensity[Y, X]
-            
-            if debug_mode:
-                console.log(f"Debug: Resized to square: {intensity.shape}")
-        
-        # Create square RGBA output
+        # Create RGBA output - ensure it's square
+        output_size = intensity.shape[0]  # Should already be square from ROI extraction
         result = np.zeros((output_size, output_size, 4), dtype=np.uint8)
         result[:, :, 0] = intensity  # R
         result[:, :, 1] = intensity  # G  
         result[:, :, 2] = intensity  # B
         result[:, :, 3] = 255        # A
         
-        if debug_mode:
-            console.log(f"Debug: Final result shape: {result.shape}")
+        # Draw result on processed canvas
+        canvas = document.getElementById('processed')
+        if canvas:
+            ctx = canvas.getContext('2d')
+            
+            # Convert numpy array to JS format using the working pattern
+            js_array = to_js(result.flatten().tolist())
+            image_data_result = ctx.createImageData(output_size, output_size)
+            image_data_result.data.set(js_array)
+            
+            # Clear and draw
+            ctx.clearRect(0, 0, canvas.width, canvas.height)
+            
+            # Create temp canvas for the image data
+            temp_result_canvas = document.createElement('canvas')
+            temp_result_ctx = temp_result_canvas.getContext('2d')
+            temp_result_canvas.width = output_size
+            temp_result_canvas.height = output_size
+            temp_result_ctx.putImageData(image_data_result, 0, 0)
+            
+            # Scale to fit the display canvas
+            ctx.drawImage(temp_result_canvas, 0, 0, canvas.width, canvas.height)
+            
+            if debug_mode:
+                console.log("Debug: Successfully updated processed canvas")
         
-        # Convert to Python list to avoid proxy destruction issues
-        # This ensures the data is properly copied and won't be garbage collected
-        result_flattened = result.flatten()
-        result_list = result_flattened.tolist()
+        # Update status
+        from js import Date
+        document.getElementById('last-processed').textContent = Date.new().toLocaleTimeString()
         
-        if debug_mode:
-            console.log(f"Debug: Converted to list with length: {len(result_list)}")
-        
-        return result_list
+        return True
         
     except Exception as e:
         console.log(f"Processing error: {e}")
         if debug_mode:
             console.log(f"Debug: Exception type: {type(e).__name__}")
-            # Try to get more detailed error information
             import traceback
             console.log(f"Debug: Full traceback: {traceback.format_exc()}")
-        return None
+        return False
 
-def process_frame_from_snapshot():
-    """Process frame using snapshot API to avoid cross-origin issues"""
-    try:
-        from js import fetch, location
-        from pyodide.ffi import to_js
-        
-        # Use the JavaScript API to fetch a snapshot
-        # This avoids the cross-origin canvas issue
-        def process_snapshot(image_blob):
-            # Create a new image element
-            img = document.createElement('img')
-            
-            def on_image_load(event):
-                try:
-                    # Create a temporary canvas to process the image
-                    temp_canvas = document.createElement('canvas')
-                    temp_ctx = temp_canvas.getContext('2d')
-                    
-                    # Set canvas size to match image
-                    temp_canvas.width = img.naturalWidth
-                    temp_canvas.height = img.naturalHeight
-                    
-                    # Draw image to temporary canvas
-                    temp_ctx.drawImage(img, 0, 0)
-                    
-                    # Get image data
-                    image_data = temp_ctx.getImageData(0, 0, temp_canvas.width, temp_canvas.height)
-                    
-                    # Process the image
-                    processed_data = process_image_data(image_data.data, temp_canvas.width, temp_canvas.height)
-                    
-                    if processed_data is not None:
-                        if debug_mode:
-                            console.log(f"Debug: Received processed data with length: {len(processed_data)}")
-                        
-                        # Display on the main canvas
-                        canvas = document.getElementById('processed')
-                        ctx = canvas.getContext('2d')
-                        
-                        # Convert Python list to Uint8ClampedArray for ImageData
-                        # This avoids the proxy destruction issue
-                        uint8_array = Uint8ClampedArray.new(processed_data)
-                        
-                        if debug_mode:
-                            console.log(f"Debug: Created Uint8ClampedArray with length: {uint8_array.length}")
-                        
-                        # Create new image data and display
-                        new_image_data = ImageData.new(uint8_array, temp_canvas.width, temp_canvas.height)
-                        
-                        if debug_mode:
-                            console.log(f"Debug: Created ImageData with size: {temp_canvas.width}x{temp_canvas.height}")
-                        
-                        # Scale to fit canvas
-                        ctx.clearRect(0, 0, canvas.width, canvas.height)
-                        temp_canvas2 = document.createElement('canvas')
-                        temp_ctx2 = temp_canvas2.getContext('2d')
-                        temp_canvas2.width = temp_canvas.width
-                        temp_canvas2.height = temp_canvas.height
-                        temp_ctx2.putImageData(new_image_data, 0, 0)
-                        
-                        # Scale and draw to main canvas
-                        ctx.drawImage(temp_canvas2, 0, 0, canvas.width, canvas.height)
-                        
-                        if debug_mode:
-                            console.log("Debug: Successfully updated processed canvas")
-                        
-                        # Update status with current time from JS Date object
-                        from js import Date
-                        document.getElementById('last-processed').textContent = Date.new().toLocaleTimeString()
-                    
-                    # Clean up all references
-                    from js import URL
-                    URL.revokeObjectURL(img.src)
-                    
-                    # Clear temporary variables to help with garbage collection
-                    temp_canvas = None
-                    temp_ctx = None
-                    temp_canvas2 = None
-                    temp_ctx2 = None
-                    uint8_array = None
-                    new_image_data = None
-                    
-                except Exception as e:
-                    console.log(f"Snapshot processing error: {e}")
-                    if debug_mode:
-                        console.log(f"Debug: Exception in image processing: {type(e).__name__}")
-                        import traceback
-                        console.log(f"Debug: Traceback: {traceback.format_exc()}")
-                    
-                    # Show error status to user
-                    document.getElementById('status').textContent = f'Processing error: {e}'
-            
-            img.onload = create_proxy(on_image_load)
-            from js import URL
-            img.src = URL.createObjectURL(image_blob)
-        
-        # Fetch snapshot from API
-        from js import window
-        base_url = window.baseUrl if hasattr(window, 'baseUrl') else location.origin
-        
-        def handle_response(response):
-            response.blob().then(create_proxy(process_snapshot))
-        
-        def handle_error(error):
-            console.log(f"Failed to fetch snapshot: {error}")
-        
-        fetch(f"{base_url}/snapshot").then(create_proxy(handle_response)).catch(create_proxy(handle_error))
-        
-    except Exception as e:
-        console.log(f"Process frame error: {e}")
-
-def update_processed_canvas(event=None):
-    """Update the processed canvas with Fresnel propagation using snapshot API"""
-    process_frame_from_snapshot()
-
-def toggle_processing(event=None):  # Fixed: added event parameter
+def toggle_processing():
     """Toggle real-time processing on/off"""
     global processing_enabled, processing_interval
     
     processing_enabled = not processing_enabled
     
     if processing_enabled:
-        # Start processing every 500ms (slower to avoid overwhelming the API)
-        processing_interval = setInterval(create_proxy(update_processed_canvas), 500)
+        # Start processing every 1 second (not too frequent to avoid overwhelming)
+        def process_frame_timer():
+            process_image_for_hologram()
+        
+        processing_interval = setInterval(process_frame_timer, 1000)
         document.getElementById('toggleProcessing').textContent = 'Disable Processing'
         document.getElementById('processing-enabled').textContent = 'Enabled'
         document.getElementById('status').textContent = 'Processing frames...'
@@ -341,7 +308,11 @@ def toggle_processing(event=None):  # Fixed: added event parameter
         document.getElementById('processing-enabled').textContent = 'Disabled'
         document.getElementById('status').textContent = 'Processing stopped'
 
-def toggle_debug_mode(event=None):
+def process_single_frame():
+    """Process a single frame"""
+    process_image_for_hologram()
+
+def toggle_debug_mode():
     """Toggle debug mode on/off"""
     global debug_mode
     
@@ -356,36 +327,73 @@ def toggle_debug_mode(event=None):
         document.getElementById('debug-status').textContent = 'Disabled'
         console.log("Debug mode disabled")
 
-def update_parameters(event=None):
+def update_parameters():
     """Update processing parameters from sliders"""
     global current_wavelength, current_pixelsize, current_dz
     
     # Update wavelength (nm to m)
-    wavelength_nm = float(document.getElementById('wavelength').value)
-    current_wavelength = wavelength_nm * 1e-9
-    document.getElementById('wavelength-value').textContent = str(int(wavelength_nm))
+    wavelength_elem = document.getElementById('wavelength')
+    if wavelength_elem:
+        wavelength_nm = float(wavelength_elem.value)
+        current_wavelength = wavelength_nm * 1e-9
+        wavelength_value_elem = document.getElementById('wavelength-value')
+        if wavelength_value_elem:
+            wavelength_value_elem.textContent = str(int(wavelength_nm))
     
     # Update pixel size (µm to m)
-    pixelsize_um = float(document.getElementById('pixelsize').value)
-    current_pixelsize = pixelsize_um * 1e-6
-    document.getElementById('pixelsize-value').textContent = str(pixelsize_um)
+    pixelsize_elem = document.getElementById('pixelsize')
+    if pixelsize_elem:
+        pixelsize_um = float(pixelsize_elem.value)
+        current_pixelsize = pixelsize_um * 1e-6
+        pixelsize_value_elem = document.getElementById('pixelsize-value')
+        if pixelsize_value_elem:
+            pixelsize_value_elem.textContent = str(pixelsize_um)
     
     # Update distance (mm to m)
-    dz_mm = float(document.getElementById('dz').value)
-    current_dz = dz_mm * 1e-3
-    document.getElementById('dz-value').textContent = str(dz_mm)
+    dz_elem = document.getElementById('dz')
+    if dz_elem:
+        dz_mm = float(dz_elem.value)
+        current_dz = dz_mm * 1e-3
+        dz_value_elem = document.getElementById('dz-value')
+        if dz_value_elem:
+            dz_value_elem.textContent = str(dz_mm)
 
-# Set up event listeners
-document.getElementById('toggleProcessing').onclick = create_proxy(toggle_processing)
-document.getElementById('processFrame').onclick = create_proxy(update_processed_canvas)
-document.getElementById('toggleDebug').onclick = create_proxy(toggle_debug_mode)
+# Set up event listeners using direct assignment
+try:
+    toggle_btn = document.getElementById('toggleProcessing')
+    if toggle_btn:
+        toggle_btn.onclick = toggle_processing
+        
+    process_btn = document.getElementById('processFrame') 
+    if process_btn:
+        process_btn.onclick = process_single_frame
+        
+    debug_btn = document.getElementById('toggleDebug')
+    if debug_btn:
+        debug_btn.onclick = toggle_debug_mode
 
-# Parameter slider listeners
-document.getElementById('wavelength').oninput = create_proxy(update_parameters)
-document.getElementById('pixelsize').oninput = create_proxy(update_parameters)
-document.getElementById('dz').oninput = create_proxy(update_parameters)
+    # Parameter slider listeners
+    wavelength_slider = document.getElementById('wavelength')
+    if wavelength_slider:
+        wavelength_slider.oninput = update_parameters
+        
+    pixelsize_slider = document.getElementById('pixelsize')
+    if pixelsize_slider:
+        pixelsize_slider.oninput = update_parameters
+        
+    dz_slider = document.getElementById('dz')
+    if dz_slider:
+        dz_slider.oninput = update_parameters
 
-# Initial parameter update
-update_parameters()
-
-console.log("PyScript hologram processing initialized")
+    # Initial parameter update
+    update_parameters()
+    
+    console.log("✅ PyScript hologram processing initialized successfully!")
+    
+    # Test with a single frame to verify everything works
+    process_image_for_hologram()
+    
+except Exception as e:
+    console.log(f"❌ Error setting up event listeners: {e}")
+    import traceback
+    console.log(f"Debug: Traceback: {traceback.format_exc()}")

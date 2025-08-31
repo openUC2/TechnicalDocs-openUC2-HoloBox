@@ -5,9 +5,9 @@
   <title>HoloBox Camera & Processor</title>
   <link href="./css/bootstrap.min.css" rel="stylesheet">
   
-  <!-- Use CDN PyScript for reliability -->
-  <script type="module" src="https://pyscript.net/releases/2024.8.2/core.js"></script>
-  <link rel="stylesheet" href="https://pyscript.net/releases/2024.8.2/core.css">
+  <!-- Use local PyScript files for offline operation -->
+  <script type="module" src="./js/pyscript/core.js"></script>
+  <link rel="stylesheet" href="./js/pyscript/core.css">
   
   <style>
     #stream, #processed { max-width: 100%; border: 1px solid #ccc; margin: 10px; transition: transform 0.3s ease; }
@@ -324,45 +324,14 @@
 
 </div>
 
-<!-- PyScript configuration with reliable package loading -->
+<!-- PyScript configuration with local pyodide interpreter -->
 <py-config>
-  name = "holobox-processor"
-  version = "1.0.0"
-  packages = ["numpy", "scipy"]
+  interpreter = "./js/pyodide/pyodide.mjs"    
+  packages = ["numpy", "matplotlib"]
 </py-config>
 
-<!-- Package installation and hologram processing -->
-<script type="py">
-  # Load packages reliably
-  from pyscript import document
-  
-  print("🔧 Loading hologram processing packages...")
-  
-  try:
-      # Import packages (they should be loaded by py-config)
-      import numpy as np
-      import scipy
-      print("✅ Packages loaded successfully!")
-      print(f"NumPy version: {np.__version__}")
-      
-      # Set flag that packages are ready
-      import js
-      js.pyodidePackagesReady = True
-      js.numpy = np  # Make numpy available to JavaScript
-      
-      # Trigger any waiting JavaScript functions
-      from js import window
-      if hasattr(window, 'onPyodideReady'):
-          window.onPyodideReady()
-          
-  except Exception as e:
-      print(f"❌ Package loading failed: {e}")
-      import js
-      js.pyodidePackagesReady = False
-</script>
-
-<!-- External PyScript file -->
-<script type="py" src="./hologram_processing.py"></script>
+<!-- Simplified PyScript setup with direct hologram processing -->
+<py-script src="./hologram_processing.py"></py-script>
 
 <!-- External JavaScript file -->
 <script src="./camera_controls.js"></script>
