@@ -55,7 +55,7 @@ except ImportError:
             # Create a mock camera frame with some pattern
             frame = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
             # Add some pattern for testing
-            cv2.circle(frame, (320, 240), 50, (255, 255, 255), -1)
+            cv2.rectangle(frame, (320, 240), (370, 290), (255, 255, 255), -1)
             return frame
             
         def release(self):
@@ -171,6 +171,12 @@ def root():
     """Redirect root URL to the main interface"""
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/static/index.html", status_code=301)
+
+@app.get("/favicon.ico")
+def favicon():
+    "Redirect favicon"
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/static/assets/favicon.ico", status_code=301)
 
 @app.get("/snapshot", summary="Single JPEG frame")
 def snapshot() -> Response:

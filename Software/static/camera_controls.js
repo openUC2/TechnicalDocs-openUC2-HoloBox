@@ -6,7 +6,6 @@ window.baseUrl = baseUrl;
 
 document.addEventListener('DOMContentLoaded', function() {
     // Set up event listeners once DOM is loaded
-    document.getElementById('setHost').onclick = setHost;
     document.getElementById('startBtn').onclick = startStream;
     document.getElementById('stopBtn').onclick = stopStream;
     document.getElementById('setExposure').onclick = setExposure;
@@ -19,24 +18,93 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('enableAP').onclick = enableAccessPoint;
     document.getElementById('connectWifi').onclick = connectToWifi;
     
+    // Image orientation controls
+    document.getElementById('flipX').onchange = updateImageOrientation;
+    document.getElementById('flipY').onchange = updateImageOrientation;
+    document.getElementById('rotationAngle').onchange = updateImageOrientation;
+    
+    // Processing options
+    document.getElementById('roiSize').onchange = updateBoundaryBox;
+    document.getElementById('colorChannel').onchange = updateProcessingSettings;
+    
+    // Boundary box control
+    document.getElementById('showBoundaryBox').onchange = toggleBoundaryBox;
+    
+    // URL input change listener for user edits
+    document.getElementById('host').onchange = updateBaseUrl;
+    document.getElementById('host').oninput = updateBaseUrl;
+    
+    // Auto-detect URL from browser location (initial suggestion only)
+    initializeAutoDetectedUrl();
+    
     // Initialize
     document.getElementById('status').textContent = 'Ready - Click Start Stream to begin';
     refreshWifiStatus(); // Load initial WiFi status
+    
+    // Initialize processing canvas to square aspect ratio
+    initializeProcessedCanvas();
 });
 
-const setHost = () => {
-    const val = document.getElementById('host').value.trim();
-    if (val) {
-        baseUrl = val.replace(/\/+$/, '');
-        window.baseUrl = baseUrl;  // Update global reference
+// Auto-detect URL from browser location (initial suggestion only)
+const initializeAutoDetectedUrl = () => {
+    const hostInput = document.getElementById('host');
+    const currentHost = window.location.hostname;
+    const currentPort = window.location.port;
+    
+    // Always use HTTP as requested by user
+    let detectedUrl;
+    
+    // If we're accessing via specific host, use current host with port 8000
+    if (currentHost !== '127.0.0.1') {
+        detectedUrl = `https://${currentHost}:${currentPort || 8000}`;
+    } else {
+        // Default fallback for local development
+        detectedUrl = 'https://192.168.4.1:8000';
+    }
+    
+    // Only set the value if the field is empty (initial load)
+    if (!hostInput.value.trim()) {
+        hostInput.value = detectedUrl;
+    }
+    
+    // Update baseUrl from whatever is in the field
+    updateBaseUrl();
+    
+    console.log('Auto-detected API URL:', baseUrl);
+};
+
+// Update baseUrl when user changes the host input
+const updateBaseUrl = () => {
+    const hostInput = document.getElementById('host');
+    const newUrl = hostInput.value.trim();
+    
+    if (newUrl) {
+        baseUrl = newUrl.replace(/\/+$/, ''); // Remove trailing slashes
+        window.baseUrl = baseUrl;
+        console.log('Updated API URL to:', baseUrl);
     }
 };
 
 const api = (path, opt = {}) => fetch(baseUrl + path, opt);
 
 const startStream = () => {
-    document.getElementById('stream').src = baseUrl + '/stream';
-    document.getElementById('status').textContent = 'Stream started';
+    const stream = document.getElementById('stream');
+    stream.src = baseUrl + '/stream';
+    
+    stream.onload = () => {
+        updateStreamAspectRatio();
+        if (!document.getElementById('boundary-box').classList.contains('hidden')) {
+            updateBoundaryBox();
+        }
+        document.getElementById('status').textContent = 'Stream started';
+    };
+    
+    // Handle window resize
+    window.addEventListener('resize', () => {
+        if (!document.getElementById('boundary-box').classList.contains('hidden')) {
+            updateBoundaryBox();
+        }
+    });
 };
 
 const stopStream = () => {
@@ -142,8 +210,8 @@ const scanNetworks = () => {
                 const lockIcon = network.encrypted ? '🔒' : '📶';
                 const quality = network.quality || 'Unknown';
                 html += `
-                    <div class="border-bottom py-2 network-item" 
-                         style="cursor: pointer;" 
+                    <div class="border-bottom py-2 network-item text-light" 
+                         style="cursor: pointer; border-color: var(--bs-border-color-translucent) !important;" 
                          onclick="selectNetwork('${network.ssid}')">
                         <div class="d-flex justify-content-between">
                             <span>${lockIcon} ${network.ssid}</span>
@@ -236,4 +304,295 @@ const enableAccessPoint = () => {
         document.getElementById('enableAP').disabled = false;
         document.getElementById('enableAP').textContent = 'Enable Access Point';
     });
+};
+
+// Image Orientation Controls
+const updateImageOrientation = () => {
+    const stream = document.getElementById('stream');
+    const flipX = document.getElementById('flipX').checked;
+    const flipY = document.getElementById('flipY').checked;
+    const rotationAngle = document.getElementById('rotationAngle').value;
+    
+    // Remove existing orientation classes
+    stream.classList.remove('flip-x', 'flip-y', 'rotate0', 'rotate90', 'rotate180', 'rotate270');
+    
+    // Apply flip classes
+    if (flipX) stream.classList.add('flip-x');
+    if (flipY) stream.classList.add('flip-y');
+    
+    // Apply rotation class
+    stream.classList.add(`rotate${rotationAngle}`);
+    
+    // Update aspect ratio container to accommodate rotation
+    updateStreamAspectRatio();
+    
+    // Send orientation settings to processing backend
+    updateProcessingSettings();
+};
+
+// Boundary Box Control
+const toggleBoundaryBox = () => {
+    const boundaryBox = document.getElementById('boundary-box');
+    const showBox = document.getElementById('showBoundaryBox').checked;
+    
+    if (showBox) {
+        boundaryBox.classList.remove('hidden');
+        updateBoundaryBox();
+    } else {
+        boundaryBox.classList.add('hidden');
+    }
+};
+
+const updateBoundaryBox = () => {
+    const stream = document.getElementById('stream');
+    const boundaryBox = document.getElementById('boundary-box');
+    const roiSize = parseInt(document.getElementById('roiSize').value);
+    
+    if (!stream.naturalWidth || !stream.naturalHeight) {
+        // If image not loaded, try again in a bit
+        setTimeout(updateBoundaryBox, 100);
+        return;
+    }
+    
+    // Get current orientation settings
+    const flipX = document.getElementById('flipX').checked;
+    const flipY = document.getElementById('flipY').checked;
+    const rotationAngle = parseInt(document.getElementById('rotationAngle').value);
+    
+    // Calculate the display size of the image
+    let displayWidth = stream.offsetWidth;
+    let displayHeight = stream.offsetHeight;
+    let naturalWidth = stream.naturalWidth;
+    let naturalHeight = stream.naturalHeight;
+    
+    // Account for 90/270 degree rotations that swap dimensions
+    if (rotationAngle === 90 || rotationAngle === 270) {
+        [naturalWidth, naturalHeight] = [naturalHeight, naturalWidth];
+    }
+    
+    // Calculate scale factors accounting for rotation
+    const scaleX = displayWidth / naturalWidth;
+    const scaleY = displayHeight / naturalHeight;
+    const scale = Math.min(scaleX, scaleY); // Use smaller scale to fit within container
+    
+    // Calculate square ROI size in display pixels
+    const roiDisplaySize = roiSize * scale;
+    
+    // Center the square ROI (always centered regardless of transformations)
+    const left = (displayWidth - roiDisplaySize) / 2;
+    const top = (displayHeight - roiDisplaySize) / 2;
+    
+    // Position the boundary box (square) - transformations are handled by CSS
+    boundaryBox.style.left = left + 'px';
+    boundaryBox.style.top = top + 'px';
+    boundaryBox.style.width = roiDisplaySize + 'px';
+    boundaryBox.style.height = roiDisplaySize + 'px';
+    
+    // Apply the same transformations to the boundary box as the stream
+    boundaryBox.classList.remove('flip-x', 'flip-y', 'rotate0', 'rotate90', 'rotate180', 'rotate270');
+    if (flipX) boundaryBox.classList.add('flip-x');
+    if (flipY) boundaryBox.classList.add('flip-y');
+    boundaryBox.classList.add(`rotate${rotationAngle}`);
+    
+    // Update processing settings to reflect ROI change
+    updateProcessingSettings();
+};
+
+// Get actual boundary box coordinates for PyScript processing
+const getBoundaryBoxCoordinates = () => {
+    const stream = document.getElementById('stream');
+    const boundaryBox = document.getElementById('boundary-box');
+    const roiSize = parseInt(document.getElementById('roiSize').value);
+    
+    if (!stream.naturalWidth || !stream.naturalHeight || boundaryBox.classList.contains('hidden')) {
+        // Return center coordinates as fallback
+        return {
+            start_x: Math.max(0, (stream.naturalWidth - roiSize) / 2),
+            start_y: Math.max(0, (stream.naturalHeight - roiSize) / 2),
+            end_x: Math.min(stream.naturalWidth, (stream.naturalWidth + roiSize) / 2),
+            end_y: Math.min(stream.naturalHeight, (stream.naturalHeight + roiSize) / 2),
+            roi_size: roiSize,
+            is_centered: true
+        };
+    }
+    
+    // Get current orientation settings
+    const flipX = document.getElementById('flipX').checked;
+    const flipY = document.getElementById('flipY').checked;
+    const rotationAngle = parseInt(document.getElementById('rotationAngle').value);
+    
+    // Get boundary box display position
+    const boxRect = boundaryBox.getBoundingClientRect();
+    const streamRect = stream.getBoundingClientRect();
+    
+    // Calculate relative position within the stream display area
+    const relativeX = (boxRect.left - streamRect.left) / streamRect.width;
+    const relativeY = (boxRect.top - streamRect.top) / streamRect.height;
+    const relativeWidth = boxRect.width / streamRect.width;
+    const relativeHeight = boxRect.height / streamRect.height;
+    
+    // Convert to natural image coordinates
+    let naturalWidth = stream.naturalWidth;
+    let naturalHeight = stream.naturalHeight;
+    
+    // Account for rotation that swaps dimensions
+    if (rotationAngle === 90 || rotationAngle === 270) {
+        [naturalWidth, naturalHeight] = [naturalHeight, naturalWidth];
+    }
+    
+    // Calculate coordinates in natural image space
+    let start_x = Math.round(relativeX * naturalWidth);
+    let start_y = Math.round(relativeY * naturalHeight);
+    let box_width = Math.round(relativeWidth * naturalWidth);
+    let box_height = Math.round(relativeHeight * naturalHeight);
+    
+    // Account for transformations when mapping back to original image coordinates
+    if (flipX) {
+        start_x = naturalWidth - start_x - box_width;
+    }
+    if (flipY) {
+        start_y = naturalHeight - start_y - box_height;
+    }
+    
+    // Ensure bounds are within image
+    start_x = Math.max(0, Math.min(start_x, naturalWidth - box_width));
+    start_y = Math.max(0, Math.min(start_y, naturalHeight - box_height));
+    
+    return {
+        start_x: start_x,
+        start_y: start_y,
+        end_x: start_x + box_width,
+        end_y: start_y + box_height,
+        roi_size: Math.min(box_width, box_height), // Use smaller dimension for square ROI
+        is_centered: false,
+        transformations: {
+            flip_x: flipX,
+            flip_y: flipY,
+            rotation: rotationAngle
+        }
+    };
+};
+
+// Make function available globally for PyScript
+window.getBoundaryBoxCoordinates = getBoundaryBoxCoordinates;
+
+// Aspect Ratio Management
+const updateStreamAspectRatio = () => {
+    const stream = document.getElementById('stream');
+    
+    // Ensure the image maintains its aspect ratio
+    stream.style.height = 'auto';
+    stream.style.objectFit = 'contain';
+    
+    // Update boundary box if visible
+    if (!document.getElementById('boundary-box').classList.contains('hidden')) {
+        setTimeout(updateBoundaryBox, 50); // Small delay to let CSS apply
+    }
+};
+
+// Slider Controls with +/- buttons
+const adjustSlider = (sliderId, delta) => {
+    const slider = document.getElementById(sliderId);
+    const currentValue = parseFloat(slider.value);
+    const step = parseFloat(slider.step);
+    const min = parseFloat(slider.min);
+    const max = parseFloat(slider.max);
+    
+    // Calculate new value
+    let newValue = currentValue + delta;
+    
+    // Clamp to min/max bounds
+    newValue = Math.max(min, Math.min(max, newValue));
+    
+    // Round to step precision to avoid floating point errors
+    newValue = Math.round(newValue / step) * step;
+    
+    // Set the new value
+    slider.value = newValue;
+    
+    // Trigger the input event to update displays
+    slider.dispatchEvent(new Event('input'));
+};
+
+// Processing Settings Update Function
+const updateProcessingSettings = () => {
+    // Get current settings
+    const flipX = document.getElementById('flipX').checked;
+    const flipY = document.getElementById('flipY').checked;
+    const rotationAngle = parseInt(document.getElementById('rotationAngle').value);
+    const roiSize = parseInt(document.getElementById('roiSize').value);
+    const colorChannel = document.getElementById('colorChannel').value;
+    
+    const settings = {
+        orientation: {
+            flipX: flipX,
+            flipY: flipY, 
+            rotation: rotationAngle
+        },
+        roi: {
+            size: roiSize,
+            centerX: 0.5, // Always center for now
+            centerY: 0.5
+        },
+        processing: {
+            colorChannel: colorChannel
+        }
+    };
+    
+    console.log('Updating processing settings:', settings);
+    
+    // Apply transformations to processed canvas
+    applyProcessedCanvasTransformations(settings.orientation);
+    
+    // Update hologram processing if available
+    if (typeof window.updateHologramProcessingSettings === 'function') {
+        window.updateHologramProcessingSettings(settings);
+    }
+    
+    // Send to backend (if available)
+    api('/processing/settings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(settings)
+    }).then(r => r.json()).then(data => {
+        console.log('Processing settings updated:', data);
+    }).catch(err => {
+        console.warn('Could not update backend processing settings (offline mode):', err);
+    });
+};
+
+// Apply transformations to processed canvas
+const applyProcessedCanvasTransformations = (orientation) => {
+    const processedCanvas = document.getElementById('processed');
+    
+    // Remove existing orientation classes
+    processedCanvas.classList.remove('flip-x', 'flip-y', 'rotate0', 'rotate90', 'rotate180', 'rotate270');
+    
+    // Apply flip classes
+    if (orientation.flipX) processedCanvas.classList.add('flip-x');
+    if (orientation.flipY) processedCanvas.classList.add('flip-y');
+    
+    // Apply rotation class
+    processedCanvas.classList.add(`rotate${orientation.rotation}`);
+    
+    console.log('Applied transformations to processed canvas:', orientation);
+};
+
+// Make the settings update function available globally for PyScript
+window.updateHologramProcessingSettings = (settings) => {
+    // Store settings globally for hologram processing
+    window.hologramSettings = settings;
+    console.log('Hologram processing settings updated:', settings);
+};
+
+// Initialize processed canvas
+const initializeProcessedCanvas = () => {
+    const processedCanvas = document.getElementById('processed');
+    
+    // Ensure the canvas starts square
+    const size = Math.min(processedCanvas.width, processedCanvas.height);
+    processedCanvas.width = size;
+    processedCanvas.height = size;
+    
+    console.log(`Initialized processed canvas to ${size}x${size}`);
 };
