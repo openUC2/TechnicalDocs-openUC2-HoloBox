@@ -56,7 +56,7 @@ const initializeAutoDetectedUrl = () => {
     
     // If we're accessing via specific host, use current host with port 8000
     if (currentHost !== '127.0.0.1') {
-        detectedUrl = `https://${currentHost}:8000`;
+        detectedUrl = `https://${currentHost}:${currentPort || 8000}`;
     } else {
         // Default fallback for local development
         detectedUrl = 'https://192.168.4.1:8000';
@@ -397,6 +397,84 @@ const updateBoundaryBox = () => {
     // Update processing settings to reflect ROI change
     updateProcessingSettings();
 };
+
+// Get actual boundary box coordinates for PyScript processing
+const getBoundaryBoxCoordinates = () => {
+    const stream = document.getElementById('stream');
+    const boundaryBox = document.getElementById('boundary-box');
+    const roiSize = parseInt(document.getElementById('roiSize').value);
+    
+    if (!stream.naturalWidth || !stream.naturalHeight || boundaryBox.classList.contains('hidden')) {
+        // Return center coordinates as fallback
+        return {
+            start_x: Math.max(0, (stream.naturalWidth - roiSize) / 2),
+            start_y: Math.max(0, (stream.naturalHeight - roiSize) / 2),
+            end_x: Math.min(stream.naturalWidth, (stream.naturalWidth + roiSize) / 2),
+            end_y: Math.min(stream.naturalHeight, (stream.naturalHeight + roiSize) / 2),
+            roi_size: roiSize,
+            is_centered: true
+        };
+    }
+    
+    // Get current orientation settings
+    const flipX = document.getElementById('flipX').checked;
+    const flipY = document.getElementById('flipY').checked;
+    const rotationAngle = parseInt(document.getElementById('rotationAngle').value);
+    
+    // Get boundary box display position
+    const boxRect = boundaryBox.getBoundingClientRect();
+    const streamRect = stream.getBoundingClientRect();
+    
+    // Calculate relative position within the stream display area
+    const relativeX = (boxRect.left - streamRect.left) / streamRect.width;
+    const relativeY = (boxRect.top - streamRect.top) / streamRect.height;
+    const relativeWidth = boxRect.width / streamRect.width;
+    const relativeHeight = boxRect.height / streamRect.height;
+    
+    // Convert to natural image coordinates
+    let naturalWidth = stream.naturalWidth;
+    let naturalHeight = stream.naturalHeight;
+    
+    // Account for rotation that swaps dimensions
+    if (rotationAngle === 90 || rotationAngle === 270) {
+        [naturalWidth, naturalHeight] = [naturalHeight, naturalWidth];
+    }
+    
+    // Calculate coordinates in natural image space
+    let start_x = Math.round(relativeX * naturalWidth);
+    let start_y = Math.round(relativeY * naturalHeight);
+    let box_width = Math.round(relativeWidth * naturalWidth);
+    let box_height = Math.round(relativeHeight * naturalHeight);
+    
+    // Account for transformations when mapping back to original image coordinates
+    if (flipX) {
+        start_x = naturalWidth - start_x - box_width;
+    }
+    if (flipY) {
+        start_y = naturalHeight - start_y - box_height;
+    }
+    
+    // Ensure bounds are within image
+    start_x = Math.max(0, Math.min(start_x, naturalWidth - box_width));
+    start_y = Math.max(0, Math.min(start_y, naturalHeight - box_height));
+    
+    return {
+        start_x: start_x,
+        start_y: start_y,
+        end_x: start_x + box_width,
+        end_y: start_y + box_height,
+        roi_size: Math.min(box_width, box_height), // Use smaller dimension for square ROI
+        is_centered: false,
+        transformations: {
+            flip_x: flipX,
+            flip_y: flipY,
+            rotation: rotationAngle
+        }
+    };
+};
+
+// Make function available globally for PyScript
+window.getBoundaryBoxCoordinates = getBoundaryBoxCoordinates;
 
 // Aspect Ratio Management
 const updateStreamAspectRatio = () => {

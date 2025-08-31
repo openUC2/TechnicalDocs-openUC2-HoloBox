@@ -1,11 +1,12 @@
 import numpy as np
 from js import document, console, ImageData, Uint8ClampedArray, setInterval, clearInterval
-from pyodide.ffi import to_js
+from pyodide.ffi import to_js, create_proxy
 import asyncio
 
 # Global variables
 processing_enabled = False
 processing_interval = None
+timer_proxy = None  # Keep reference to prevent garbage collection
 current_wavelength = 440e-9  # nm to m
 current_pixelsize = 1.4e-6   # µm to m  
 current_dz = 0.005           # mm to m
@@ -76,60 +77,137 @@ def apply_image_transformations(image, flip_x=False, flip_y=False, rotation=0):
     
     return image
 
+def get_roi_coordinates_from_boundary_box(img_width, img_height, roi_size, flip_x, flip_y, rotation):
+    """
+    Calculate the actual pixel coordinates of the ROI based on the boundary box position.
+    This function uses the JavaScript boundary box coordinates to get the exact region.
+    
+    Args:
+        img_width: Width of the source image
+        img_height: Height of the source image  
+        roi_size: Size of the square ROI in pixels
+        flip_x: Whether image is flipped horizontally
+        flip_y: Whether image is flipped vertically
+        rotation: Rotation angle (0, 90, 180, 270)
+    
+    Returns:
+        Dictionary with start_x, start_y, end_x, end_y coordinates
+    """
+    try:
+        # Use JavaScript function to get actual boundary box coordinates
+        from js import window
+        if hasattr(window, 'getBoundaryBoxCoordinates'):
+            bbox_coords = window.getBoundaryBoxCoordinates()
+            
+            # Convert from JavaScript object to Python dict-like access
+            start_x = int(bbox_coords.start_x or 0)
+            start_y = int(bbox_coords.start_y or 0)  
+            end_x = int(bbox_coords.end_x or img_width)
+            end_y = int(bbox_coords.end_y or img_height)
+            
+            # Scale coordinates to match our processing canvas size
+            # The JavaScript gives us natural image coordinates, we need processing canvas coordinates
+            stream_img = document.getElementById('stream')
+            if stream_img and stream_img.naturalWidth > 0:
+                scale_x = img_width / stream_img.naturalWidth
+                scale_y = img_height / stream_img.naturalHeight
+                
+                start_x = int(start_x * scale_x)
+                start_y = int(start_y * scale_y)
+                end_x = int(end_x * scale_x)
+                end_y = int(end_y * scale_y)
+            
+            # Ensure bounds are within our processing canvas
+            start_x = max(0, min(start_x, img_width))
+            start_y = max(0, min(start_y, img_height))
+            end_x = max(start_x + 1, min(end_x, img_width))
+            end_y = max(start_y + 1, min(end_y, img_height))
+            
+            if debug_mode:
+                console.log(f"Debug: Using boundary box coordinates - start: ({start_x}, {start_y}), end: ({end_x}, {end_y})")
+            
+            return {
+                'start_x': start_x,
+                'start_y': start_y,
+                'end_x': end_x,
+                'end_y': end_y,
+                'width': end_x - start_x,
+                'height': end_y - start_y
+            }
+        else:
+            if debug_mode:
+                console.log("Debug: getBoundaryBoxCoordinates not available, using fallback")
+    
+    except Exception as e:
+        if debug_mode:
+            console.log(f"Debug: Error getting boundary box coordinates: {e}")
+    
+    # Fallback to center crop when boundary box is not available or hidden
+    center_x = img_width // 2
+    center_y = img_height // 2
+    start_x = max(0, center_x - roi_size // 2)
+    start_y = max(0, center_y - roi_size // 2)
+    end_x = min(img_width, start_x + roi_size)
+    end_y = min(img_height, start_y + roi_size)
+    
+    if debug_mode:
+        console.log(f"Debug: Using fallback center crop - start: ({start_x}, {start_y}), end: ({end_x}, {end_y})")
+    
+    return {
+        'start_x': start_x,
+        'start_y': start_y,
+        'end_x': end_x,
+        'end_y': end_y,
+        'width': end_x - start_x,
+        'height': end_y - start_y
+    }
+
 def process_image_for_hologram(width=256, height=256):
-    """Process image data through Fresnel propagation using direct canvas access"""
+    """Process image data through Fresnel propagation using stream image"""
     try:
         if debug_mode:
             console.log(f"Debug: Starting hologram processing with size {width}x{height}")
         
-        # Try to get image from camera stream canvas
-        stream_canvas = document.getElementById('stream')
+        # Try to get image from camera stream (img element)
+        stream_img = document.getElementById('stream')
         
-        if stream_canvas and hasattr(stream_canvas, 'getContext'):
-            # Create temporary canvas to get image data
-            temp_canvas = document.createElement('canvas')
-            temp_ctx = temp_canvas.getContext('2d')
-            
-            # Set canvas size
-            temp_canvas.width = width
-            temp_canvas.height = height
-            
-            # Draw from stream canvas or create test pattern
-            try:
-                temp_ctx.drawImage(stream_canvas, 0, 0, width, height)
+        # Create temporary canvas to process the image
+        temp_canvas = document.createElement('canvas')
+        temp_ctx = temp_canvas.getContext('2d')
+        temp_canvas.width = width
+        temp_canvas.height = height
+        
+        # Try to draw from stream image
+        image_data = None
+        
+        if debug_mode:
+            if stream_img:
+                console.log(f"Debug: Stream img found - src: {stream_img.src}")
+                console.log(f"Debug: Stream img dimensions: {stream_img.width}x{stream_img.height}")
+                console.log(f"Debug: Stream img complete: {stream_img.complete}")
+            else:
+                console.log("Debug: Stream img element not found")
+        
+        try:
+            if (stream_img and hasattr(stream_img, 'src') and 
+                stream_img.src and not stream_img.src.startswith('data:,') and
+                stream_img.complete and stream_img.width > 0):
+                # Draw the stream image to canvas
+                temp_ctx.drawImage(stream_img, 0, 0, width, height)
                 image_data = temp_ctx.getImageData(0, 0, width, height)
                 
                 if debug_mode:
-                    console.log("Debug: Got image data from camera stream")
-                    
-            except Exception as e:
+                    console.log("Debug: Successfully got image data from camera stream")
+            else:
                 if debug_mode:
-                    console.log(f"Debug: Failed to get camera image, creating test pattern: {e}")
+                    console.log("Debug: Stream image not ready or invalid")
+                raise Exception("Stream not ready")
                 
-                # Create synthetic test pattern (interference-like)
-                test_img = np.zeros((height, width, 4), dtype=np.uint8)
-                
-                # Create interference pattern for testing
-                y, x = np.mgrid[0:height, 0:width]
-                pattern1 = np.sin(2 * np.pi * x / 20) * np.sin(2 * np.pi * y / 20)
-                pattern2 = np.sin(2 * np.pi * x / 15 + np.pi/4) * np.sin(2 * np.pi * y / 15 + np.pi/4)
-                interference = (pattern1 + pattern2 + 2) / 4 * 255
-                
-                test_img[:, :, 0] = interference.astype(np.uint8)
-                test_img[:, :, 1] = interference.astype(np.uint8)
-                test_img[:, :, 2] = interference.astype(np.uint8)
-                test_img[:, :, 3] = 255
-                
-                # Convert to image data
-                js_array = to_js(test_img.flatten().tolist())
-                image_data = temp_ctx.createImageData(width, height)
-                image_data.data.set(js_array)
-        
-        else:
+        except Exception as e:
             if debug_mode:
-                console.log("Debug: No stream canvas found, creating test pattern")
+                console.log(f"Debug: Failed to get camera image, creating test pattern: {e}")
             
-            # Create synthetic test pattern if no canvas
+            # Create synthetic test pattern
             test_img = np.zeros((height, width, 4), dtype=np.uint8)
             
             # Create interference pattern for testing
@@ -139,12 +217,14 @@ def process_image_for_hologram(width=256, height=256):
             interference = (pattern1 + pattern2 + 2) / 4 * 255
             
             test_img[:, :, 0] = interference.astype(np.uint8)
-            test_img[:, :, 1] = interference.astype(np.uint8)
+            test_img[:, :, 1] = interference.astype(np.uint8)  
             test_img[:, :, 2] = interference.astype(np.uint8)
-            test_img[:, :, 3] = 255
+            test_img[:, :, 3] = 255  # Alpha channel
             
-            # Convert to image data
+            # Convert to JavaScript array and create ImageData
             js_array = to_js(test_img.flatten().tolist())
+            clamped_array = Uint8ClampedArray.new(js_array)
+            image_data = ImageData.new(clamped_array, width, height)
             temp_canvas = document.createElement('canvas')
             temp_ctx = temp_canvas.getContext('2d')
             temp_canvas.width = width
@@ -153,8 +233,11 @@ def process_image_for_hologram(width=256, height=256):
             image_data.data.set(js_array)
         
         # Convert image data to numpy array
-        img_array = np.array(image_data.data).reshape((height, width, 4))
-        
+        if debug_mode:
+            console.log(f"Debug: Converting image data to numpy array to height: {stream_img.height}, width: {stream_img.width}")
+
+        img_array = np.array(image_data.data).reshape((stream_img.width, stream_img.height, 3))
+
         if debug_mode:
             console.log(f"Debug: Image array shape: {img_array.shape}")
         
@@ -162,7 +245,7 @@ def process_image_for_hologram(width=256, height=256):
         flip_x = False
         flip_y = False
         rotation = 0
-        roi_size = min(256, min(height, width))
+        roi_size = min(height, width)
         color_channel = 'green'  # default
         
         # Try to get settings from the interface elements
@@ -202,23 +285,51 @@ def process_image_for_hologram(width=256, height=256):
         else:  # green or default
             gray = img_array[:, :, 1].astype(float) / 255.0
         
-        # Apply transformations to the full image first
-        transformed = apply_image_transformations(gray, flip_x, flip_y, rotation)
+        # Get ROI coordinates from boundary box instead of centering
+        # roi_coords = get_roi_coordinates_from_boundary_box(width, height, roi_size, flip_x, flip_y, rotation)
+        # TODO: We can assume that we crop a central region of NxN pixels
+        roi_coords = {}
+        roi_coords['start_x'] = (width - roi_size) // 2
+        roi_coords['start_y'] = (height - roi_size) // 2
+        roi_coords['end_x'] = roi_coords['start_x'] + roi_size
+        roi_coords['end_y'] = roi_coords['start_y'] + roi_size
+
+        if debug_mode:
+            console.log(f"Debug: ROI coordinates - start_x: {roi_coords['start_x']}, start_y: {roi_coords['start_y']}, end_x: {roi_coords['end_x']}, end_y: {roi_coords['end_y']}")
+
+        # Ensure the image is at least as large as the ROI in both directions by padding
+        if gray.shape[0] < roi_size or gray.shape[1] < roi_size:
+            console.log("Warning: Image is smaller than ROI, padding with zeros")
+            padded = np.zeros((roi_size, roi_size), dtype=np.float32)
+            start_y = (roi_size - gray.shape[0]) // 2
+            start_x = (roi_size - gray.shape[1]) // 2
+            padded[start_y:start_y + gray.shape[0], start_x:start_x + gray.shape[1]] = gray
+            gray = padded
+
+        # Extract the ROI region directly from the original image (before transformations)
+        # This way we get the exact region that the user selected with the red box
+        cropped = gray[roi_coords['start_y']:roi_coords['end_y'], roi_coords['start_x']:roi_coords['end_x']]
+        
+        # Now apply transformations only to the cropped ROI
+        if cropped.shape[0] > 0 and cropped.shape[1] > 0:
+            cropped = apply_image_transformations(cropped, flip_x, flip_y, rotation)
+        
         
         if debug_mode:
-            console.log(f"Debug: Transformed shape: {transformed.shape}")
+            console.log(f"Debug: Final cropped ROI shape: {cropped.shape}")
         
-        # Extract square ROI from center after transformations
-        t_height, t_width = transformed.shape
-        start_y = max(0, (t_height - roi_size) // 2)
-        start_x = max(0, (t_width - roi_size) // 2)
-        end_y = min(t_height, start_y + roi_size)
-        end_x = min(t_width, start_x + roi_size)
-        
-        cropped = transformed[start_y:end_y, start_x:end_x]
-        
-        if debug_mode:
-            console.log(f"Debug: Cropped ROI shape: {cropped.shape}")
+        # Validate that we have a proper ROI
+        if cropped.shape[0] == 0 or cropped.shape[1] == 0:
+            console.log("Warning: Empty ROI, falling back to center crop")
+            # Fallback to center crop
+            center_y, center_x = gray.shape[0] // 2, gray.shape[1] // 2
+            half_roi = roi_size // 2
+            start_y = max(0, center_y - half_roi)
+            start_x = max(0, center_x - half_roi)
+            end_y = min(gray.shape[0], start_y + roi_size)
+            end_x = min(gray.shape[1], start_x + roi_size)
+            cropped = gray[start_y:end_y, start_x:end_x]
+            cropped = apply_image_transformations(cropped, flip_x, flip_y, rotation)
         
         # Estimate amplitude from intensity (assume sqrt relationship)
         amplitude = np.sqrt(np.abs(cropped))
@@ -286,17 +397,22 @@ def process_image_for_hologram(width=256, height=256):
         return False
 
 def toggle_processing(event=None):
-    """Toggle real-time processing on/off"""
-    global processing_enabled, processing_interval
+    """Toggle hologram processing on/off"""
+    global processing_enabled, processing_interval, timer_proxy
     
     processing_enabled = not processing_enabled
     
     if processing_enabled:
         # Start processing every 1 second (not too frequent to avoid overwhelming)
         def process_frame_timer():
-            process_image_for_hologram()
+            try:
+                process_image_for_hologram()
+            except Exception as e:
+                console.log(f"❌ Error in timer callback: {e}")
         
-        processing_interval = setInterval(process_frame_timer, 1000)
+        # Create a proper proxy for the JavaScript callback and keep reference
+        timer_proxy = create_proxy(process_frame_timer)
+        processing_interval = setInterval(timer_proxy, 1000)
         document.getElementById('toggleProcessing').textContent = 'Disable Processing'
         document.getElementById('processing-enabled').textContent = 'Enabled'
         document.getElementById('status').textContent = 'Processing frames...'
@@ -304,6 +420,13 @@ def toggle_processing(event=None):
         # Stop processing
         if processing_interval:
             clearInterval(processing_interval)
+            processing_interval = None
+        
+        # Clean up the proxy (optional, but good practice)
+        if timer_proxy:
+            timer_proxy.destroy()
+            timer_proxy = None
+            
         document.getElementById('toggleProcessing').textContent = 'Enable Processing'
         document.getElementById('processing-enabled').textContent = 'Disabled'
         document.getElementById('status').textContent = 'Processing stopped'
@@ -358,32 +481,32 @@ def update_parameters(event=None):
         if dz_value_elem:
             dz_value_elem.textContent = str(dz_mm)
 
-# Set up event listeners using direct assignment
+# Set up event listeners using create_proxy for proper JavaScript interop
 try:
     toggle_btn = document.getElementById('toggleProcessing')
     if toggle_btn:
-        toggle_btn.onclick = toggle_processing
+        toggle_btn.onclick = create_proxy(toggle_processing)
         
     process_btn = document.getElementById('processFrame') 
     if process_btn:
-        process_btn.onclick = process_single_frame
+        process_btn.onclick = create_proxy(process_single_frame)
         
     debug_btn = document.getElementById('toggleDebug')
     if debug_btn:
-        debug_btn.onclick = toggle_debug_mode
+        debug_btn.onclick = create_proxy(toggle_debug_mode)
 
-    # Parameter slider listeners
+    # Parameter slider listeners  
     wavelength_slider = document.getElementById('wavelength')
     if wavelength_slider:
-        wavelength_slider.oninput = update_parameters
+        wavelength_slider.oninput = create_proxy(update_parameters)
         
     pixelsize_slider = document.getElementById('pixelsize')
     if pixelsize_slider:
-        pixelsize_slider.oninput = update_parameters
+        pixelsize_slider.oninput = create_proxy(update_parameters)
         
     dz_slider = document.getElementById('dz')
     if dz_slider:
-        dz_slider.oninput = update_parameters
+        dz_slider.oninput = create_proxy(update_parameters)
 
     # Initial parameter update
     update_parameters()
@@ -396,4 +519,4 @@ try:
 except Exception as e:
     console.log(f"❌ Error setting up event listeners: {e}")
     import traceback
-    console.log(f"Debug: Traceback: {traceback.format_exc()}")
+    console.log(traceback.format_exc())
