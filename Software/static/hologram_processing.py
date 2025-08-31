@@ -168,22 +168,19 @@ def process_image_for_hologram(width=256, height=256):
         if debug_mode:
             console.log(f"Debug: Starting hologram processing with size {width}x{height}")
         
-        # Try to get image from camera stream (img element)
+        # Try to get image from camera stream (img element) at full resolution
         stream_img = document.getElementById('stream')
         
-        # Create temporary canvas to process the image
-        temp_canvas = document.createElement('canvas')
-        temp_ctx = temp_canvas.getContext('2d')
-        temp_canvas.width = width
-        temp_canvas.height = height
-        
-        # Try to draw from stream image
+        # Try to draw from stream image at full resolution first
         image_data = None
+        actual_width = width
+        actual_height = height
         
         if debug_mode:
             if stream_img:
                 console.log(f"Debug: Stream img found - src: {stream_img.src}")
-                console.log(f"Debug: Stream img dimensions: {stream_img.width}x{stream_img.height}")
+                console.log(f"Debug: Stream img natural dimensions: {stream_img.naturalWidth}x{stream_img.naturalHeight}")
+                console.log(f"Debug: Stream img display dimensions: {stream_img.width}x{stream_img.height}")
                 console.log(f"Debug: Stream img complete: {stream_img.complete}")
             else:
                 console.log("Debug: Stream img element not found")
@@ -191,13 +188,24 @@ def process_image_for_hologram(width=256, height=256):
         try:
             if (stream_img and hasattr(stream_img, 'src') and 
                 stream_img.src and not stream_img.src.startswith('data:,') and
-                stream_img.complete and stream_img.width > 0):
-                # Draw the stream image to canvas
-                temp_ctx.drawImage(stream_img, 0, 0, width, height)
-                image_data = temp_ctx.getImageData(0, 0, width, height)
+                stream_img.complete and stream_img.naturalWidth > 0):
+                
+                # Use the full natural resolution of the stream image
+                actual_width = stream_img.naturalWidth
+                actual_height = stream_img.naturalHeight
+                
+                # Create temporary canvas at full resolution
+                temp_canvas = document.createElement('canvas')
+                temp_ctx = temp_canvas.getContext('2d')
+                temp_canvas.width = actual_width
+                temp_canvas.height = actual_height
+                
+                # Draw the stream image at full resolution (no scaling)
+                temp_ctx.drawImage(stream_img, 0, 0)
+                image_data = temp_ctx.getImageData(0, 0, actual_width, actual_height)
                 
                 if debug_mode:
-                    console.log("Debug: Successfully got image data from camera stream")
+                    console.log(f"Debug: Successfully got full resolution image data: {actual_width}x{actual_height}")
             else:
                 if debug_mode:
                     console.log("Debug: Stream image not ready or invalid")
@@ -207,11 +215,19 @@ def process_image_for_hologram(width=256, height=256):
             if debug_mode:
                 console.log(f"Debug: Failed to get camera image, creating test pattern: {e}")
             
+            # Create temporary canvas for test pattern at requested size
+            temp_canvas = document.createElement('canvas')
+            temp_ctx = temp_canvas.getContext('2d')
+            temp_canvas.width = width
+            temp_canvas.height = height
+            actual_width = width
+            actual_height = height
+            
             # Create synthetic test pattern
-            test_img = np.zeros((height, width, 4), dtype=np.uint8)
+            test_img = np.zeros((actual_height, actual_width, 4), dtype=np.uint8)
             
             # Create interference pattern for testing
-            y, x = np.mgrid[0:height, 0:width]
+            y, x = np.mgrid[0:actual_height, 0:actual_width]
             pattern1 = np.sin(2 * np.pi * x / 20) * np.sin(2 * np.pi * y / 20)
             pattern2 = np.sin(2 * np.pi * x / 15 + np.pi/4) * np.sin(2 * np.pi * y / 15 + np.pi/4)
             interference = (pattern1 + pattern2 + 2) / 4 * 255
@@ -223,20 +239,14 @@ def process_image_for_hologram(width=256, height=256):
             
             # Convert to JavaScript array and create ImageData
             js_array = to_js(test_img.flatten().tolist())
-            clamped_array = Uint8ClampedArray.new(js_array)
-            image_data = ImageData.new(clamped_array, width, height)
-            temp_canvas = document.createElement('canvas')
-            temp_ctx = temp_canvas.getContext('2d')
-            temp_canvas.width = width
-            temp_canvas.height = height
-            image_data = temp_ctx.createImageData(width, height)
+            image_data = temp_ctx.createImageData(actual_width, actual_height)
             image_data.data.set(js_array)
         
-        # Convert image data to numpy array
+        # Convert image data to numpy array with correct dimensions
         if debug_mode:
-            console.log(f"Debug: Converting image data to numpy array to height: {stream_img.height}, width: {stream_img.width}")
+            console.log(f"Debug: Converting image data to numpy array - actual dimensions: {actual_width}x{actual_height}")
 
-        img_array = np.array(image_data.data).reshape((stream_img.width, stream_img.height, 3))
+        img_array = np.array(image_data.data).reshape((actual_height, actual_width, 4))
 
         if debug_mode:
             console.log(f"Debug: Image array shape: {img_array.shape}")
@@ -245,7 +255,7 @@ def process_image_for_hologram(width=256, height=256):
         flip_x = False
         flip_y = False
         rotation = 0
-        roi_size = min(height, width)
+        roi_size = min(256, min(actual_height, actual_width))  # Use actual dimensions
         color_channel = 'green'  # default
         
         # Try to get settings from the interface elements
@@ -276,8 +286,10 @@ def process_image_for_hologram(width=256, height=256):
         
         if debug_mode:
             console.log(f"Debug: Settings - flipX: {flip_x}, flipY: {flip_y}, rotation: {rotation}, ROI: {roi_size}, channel: {color_channel}")
+            console.log(f"Debug: Full resolution image dimensions: {actual_width}x{actual_height}")
+            console.log("Debug: CSS transformations are already applied to the stream - no additional transformations needed")
         
-        # Extract color channel
+        # Extract color channel (use only RGB channels, skip alpha)
         if color_channel == 'red':
             gray = img_array[:, :, 0].astype(float) / 255.0
         elif color_channel == 'blue':
@@ -285,38 +297,76 @@ def process_image_for_hologram(width=256, height=256):
         else:  # green or default
             gray = img_array[:, :, 1].astype(float) / 255.0
         
-        # Get ROI coordinates from boundary box instead of centering
-        # roi_coords = get_roi_coordinates_from_boundary_box(width, height, roi_size, flip_x, flip_y, rotation)
-        # TODO: We can assume that we crop a central region of NxN pixels
+        # Calculate ROI coordinates for the full resolution image
+        # Center the ROI in the full resolution image
         roi_coords = {}
-        roi_coords['start_x'] = (width - roi_size) // 2
-        roi_coords['start_y'] = (height - roi_size) // 2
+        roi_coords['start_x'] = (actual_width - roi_size) // 2
+        roi_coords['start_y'] = (actual_height - roi_size) // 2
         roi_coords['end_x'] = roi_coords['start_x'] + roi_size
         roi_coords['end_y'] = roi_coords['start_y'] + roi_size
+        
+        # Ensure ROI is within image bounds
+        roi_coords['start_x'] = max(0, roi_coords['start_x'])
+        roi_coords['start_y'] = max(0, roi_coords['start_y'])
+        roi_coords['end_x'] = min(actual_width, roi_coords['end_x'])
+        roi_coords['end_y'] = min(actual_height, roi_coords['end_y'])
 
         if debug_mode:
             console.log(f"Debug: ROI coordinates - start_x: {roi_coords['start_x']}, start_y: {roi_coords['start_y']}, end_x: {roi_coords['end_x']}, end_y: {roi_coords['end_y']}")
 
-        # Ensure the image is at least as large as the ROI in both directions by padding
+        # Handle cases where ROI size is larger than image dimensions
         if gray.shape[0] < roi_size or gray.shape[1] < roi_size:
-            console.log("Warning: Image is smaller than ROI, padding with zeros")
-            padded = np.zeros((roi_size, roi_size), dtype=np.float32)
-            start_y = (roi_size - gray.shape[0]) // 2
-            start_x = (roi_size - gray.shape[1]) // 2
-            padded[start_y:start_y + gray.shape[0], start_x:start_x + gray.shape[1]] = gray
+            if debug_mode:
+                console.log(f"Debug: Image {gray.shape} is smaller than ROI {roi_size}x{roi_size}, padding with zeros")
+            
+            # Calculate the maximum size needed to accommodate both the image and ROI
+            pad_height = max(roi_size, gray.shape[0])
+            pad_width = max(roi_size, gray.shape[1])
+            
+            # Create a padded image with zeros
+            padded = np.zeros((pad_height, pad_width), dtype=np.float32)
+            
+            # Calculate centering offsets for placing the original image
+            start_y = (pad_height - gray.shape[0]) // 2
+            start_x = (pad_width - gray.shape[1]) // 2
+            
+            # Safely copy the original image into the padded array
+            end_y = start_y + gray.shape[0]
+            end_x = start_x + gray.shape[1]
+            
+            if debug_mode:
+                console.log(f"Debug: Padding image to {pad_height}x{pad_width}, placing original at ({start_x}, {start_y}) to ({end_x}, {end_y})")
+            
+            # Copy the original image data
+            padded[start_y:end_y, start_x:end_x] = gray
             gray = padded
+            
+            # Update the actual dimensions after padding
+            actual_height, actual_width = gray.shape
+            
+            # Recalculate ROI coordinates for the padded image
+            roi_coords['start_x'] = (actual_width - roi_size) // 2
+            roi_coords['start_y'] = (actual_height - roi_size) // 2
+            roi_coords['end_x'] = roi_coords['start_x'] + roi_size
+            roi_coords['end_y'] = roi_coords['start_y'] + roi_size
+            
+            # Ensure ROI is within padded image bounds
+            roi_coords['start_x'] = max(0, roi_coords['start_x'])
+            roi_coords['start_y'] = max(0, roi_coords['start_y'])
+            roi_coords['end_x'] = min(actual_width, roi_coords['end_x'])
+            roi_coords['end_y'] = min(actual_height, roi_coords['end_y'])
+            
+            if debug_mode:
+                console.log(f"Debug: Padded image shape: {gray.shape}")
+                console.log(f"Debug: Updated ROI coordinates after padding - start: ({roi_coords['start_x']}, {roi_coords['start_y']}), end: ({roi_coords['end_x']}, {roi_coords['end_y']})")
 
-        # Extract the ROI region directly from the original image (before transformations)
-        # This way we get the exact region that the user selected with the red box
+        # Extract the ROI region directly from the image
+        # Note: CSS transformations are already applied visually to the stream,
+        # so drawImage() captures the transformed pixels. No need to transform again!
         cropped = gray[roi_coords['start_y']:roi_coords['end_y'], roi_coords['start_x']:roi_coords['end_x']]
         
-        # Now apply transformations only to the cropped ROI
-        if cropped.shape[0] > 0 and cropped.shape[1] > 0:
-            cropped = apply_image_transformations(cropped, flip_x, flip_y, rotation)
-        
-        
         if debug_mode:
-            console.log(f"Debug: Final cropped ROI shape: {cropped.shape}")
+            console.log(f"Debug: Cropped ROI shape after extraction: {cropped.shape}")
         
         # Validate that we have a proper ROI
         if cropped.shape[0] == 0 or cropped.shape[1] == 0:
@@ -329,7 +379,6 @@ def process_image_for_hologram(width=256, height=256):
             end_y = min(gray.shape[0], start_y + roi_size)
             end_x = min(gray.shape[1], start_x + roi_size)
             cropped = gray[start_y:end_y, start_x:end_x]
-            cropped = apply_image_transformations(cropped, flip_x, flip_y, rotation)
         
         # Estimate amplitude from intensity (assume sqrt relationship)
         amplitude = np.sqrt(np.abs(cropped))

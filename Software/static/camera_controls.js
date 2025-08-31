@@ -210,8 +210,8 @@ const scanNetworks = () => {
                 const lockIcon = network.encrypted ? '🔒' : '📶';
                 const quality = network.quality || 'Unknown';
                 html += `
-                    <div class="border-bottom py-2 network-item" 
-                         style="cursor: pointer;" 
+                    <div class="border-bottom py-2 network-item text-light" 
+                         style="cursor: pointer; border-color: var(--bs-border-color-translucent) !important;" 
                          onclick="selectNetwork('${network.ssid}')">
                         <div class="d-flex justify-content-between">
                             <span>${lockIcon} ${network.ssid}</span>
