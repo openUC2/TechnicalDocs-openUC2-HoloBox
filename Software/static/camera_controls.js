@@ -30,15 +30,22 @@ document.addEventListener('DOMContentLoaded', function() {
     // Boundary box control
     document.getElementById('showBoundaryBox').onchange = toggleBoundaryBox;
     
-    // Auto-detect URL from browser location (no manual input needed)
+    // URL input change listener for user edits
+    document.getElementById('host').onchange = updateBaseUrl;
+    document.getElementById('host').oninput = updateBaseUrl;
+    
+    // Auto-detect URL from browser location (initial suggestion only)
     initializeAutoDetectedUrl();
     
     // Initialize
     document.getElementById('status').textContent = 'Ready - Click Start Stream to begin';
     refreshWifiStatus(); // Load initial WiFi status
+    
+    // Initialize processing canvas to square aspect ratio
+    initializeProcessedCanvas();
 });
 
-// Auto-detect URL from browser location 
+// Auto-detect URL from browser location (initial suggestion only)
 const initializeAutoDetectedUrl = () => {
     const hostInput = document.getElementById('host');
     const currentHost = window.location.hostname;
@@ -48,18 +55,34 @@ const initializeAutoDetectedUrl = () => {
     let detectedUrl;
     
     // If we're accessing via specific host, use current host with port 8000
-    if (currentHost !== 'localhost' && currentHost !== '127.0.0.1') {
-        detectedUrl = `http://${currentHost}:8000`;
+    if (currentHost !== '127.0.0.1') {
+        detectedUrl = `https://${currentHost}:8000`;
     } else {
         // Default fallback for local development
-        detectedUrl = 'http://192.168.4.1:8000';
+        detectedUrl = 'https://192.168.4.1:8000';
     }
     
-    hostInput.value = detectedUrl;
-    baseUrl = detectedUrl.replace(/\/+$/, '');
-    window.baseUrl = baseUrl;
+    // Only set the value if the field is empty (initial load)
+    if (!hostInput.value.trim()) {
+        hostInput.value = detectedUrl;
+    }
+    
+    // Update baseUrl from whatever is in the field
+    updateBaseUrl();
     
     console.log('Auto-detected API URL:', baseUrl);
+};
+
+// Update baseUrl when user changes the host input
+const updateBaseUrl = () => {
+    const hostInput = document.getElementById('host');
+    const newUrl = hostInput.value.trim();
+    
+    if (newUrl) {
+        baseUrl = newUrl.replace(/\/+$/, ''); // Remove trailing slashes
+        window.baseUrl = baseUrl;
+        console.log('Updated API URL to:', baseUrl);
+    }
 };
 
 const api = (path, opt = {}) => fetch(baseUrl + path, opt);
@@ -331,27 +354,45 @@ const updateBoundaryBox = () => {
         return;
     }
     
-    // Calculate the display size of the image
-    const displayWidth = stream.offsetWidth;
-    const displayHeight = stream.offsetHeight;
+    // Get current orientation settings
+    const flipX = document.getElementById('flipX').checked;
+    const flipY = document.getElementById('flipY').checked;
+    const rotationAngle = parseInt(document.getElementById('rotationAngle').value);
     
-    // Calculate scale factors
-    const scaleX = displayWidth / stream.naturalWidth;
-    const scaleY = displayHeight / stream.naturalHeight;
+    // Calculate the display size of the image
+    let displayWidth = stream.offsetWidth;
+    let displayHeight = stream.offsetHeight;
+    let naturalWidth = stream.naturalWidth;
+    let naturalHeight = stream.naturalHeight;
+    
+    // Account for 90/270 degree rotations that swap dimensions
+    if (rotationAngle === 90 || rotationAngle === 270) {
+        [naturalWidth, naturalHeight] = [naturalHeight, naturalWidth];
+    }
+    
+    // Calculate scale factors accounting for rotation
+    const scaleX = displayWidth / naturalWidth;
+    const scaleY = displayHeight / naturalHeight;
     const scale = Math.min(scaleX, scaleY); // Use smaller scale to fit within container
     
     // Calculate square ROI size in display pixels
     const roiDisplaySize = roiSize * scale;
     
-    // Center the square ROI
+    // Center the square ROI (always centered regardless of transformations)
     const left = (displayWidth - roiDisplaySize) / 2;
     const top = (displayHeight - roiDisplaySize) / 2;
     
-    // Position the boundary box (square)
+    // Position the boundary box (square) - transformations are handled by CSS
     boundaryBox.style.left = left + 'px';
     boundaryBox.style.top = top + 'px';
     boundaryBox.style.width = roiDisplaySize + 'px';
     boundaryBox.style.height = roiDisplaySize + 'px';
+    
+    // Apply the same transformations to the boundary box as the stream
+    boundaryBox.classList.remove('flip-x', 'flip-y', 'rotate0', 'rotate90', 'rotate180', 'rotate270');
+    if (flipX) boundaryBox.classList.add('flip-x');
+    if (flipY) boundaryBox.classList.add('flip-y');
+    boundaryBox.classList.add(`rotate${rotationAngle}`);
     
     // Update processing settings to reflect ROI change
     updateProcessingSettings();
@@ -422,6 +463,9 @@ const updateProcessingSettings = () => {
     
     console.log('Updating processing settings:', settings);
     
+    // Apply transformations to processed canvas
+    applyProcessedCanvasTransformations(settings.orientation);
+    
     // Update hologram processing if available
     if (typeof window.updateHologramProcessingSettings === 'function') {
         window.updateHologramProcessingSettings(settings);
@@ -437,4 +481,40 @@ const updateProcessingSettings = () => {
     }).catch(err => {
         console.warn('Could not update backend processing settings (offline mode):', err);
     });
+};
+
+// Apply transformations to processed canvas
+const applyProcessedCanvasTransformations = (orientation) => {
+    const processedCanvas = document.getElementById('processed');
+    
+    // Remove existing orientation classes
+    processedCanvas.classList.remove('flip-x', 'flip-y', 'rotate0', 'rotate90', 'rotate180', 'rotate270');
+    
+    // Apply flip classes
+    if (orientation.flipX) processedCanvas.classList.add('flip-x');
+    if (orientation.flipY) processedCanvas.classList.add('flip-y');
+    
+    // Apply rotation class
+    processedCanvas.classList.add(`rotate${orientation.rotation}`);
+    
+    console.log('Applied transformations to processed canvas:', orientation);
+};
+
+// Make the settings update function available globally for PyScript
+window.updateHologramProcessingSettings = (settings) => {
+    // Store settings globally for hologram processing
+    window.hologramSettings = settings;
+    console.log('Hologram processing settings updated:', settings);
+};
+
+// Initialize processed canvas
+const initializeProcessedCanvas = () => {
+    const processedCanvas = document.getElementById('processed');
+    
+    // Ensure the canvas starts square
+    const size = Math.min(processedCanvas.width, processedCanvas.height);
+    processedCanvas.width = size;
+    processedCanvas.height = size;
+    
+    console.log(`Initialized processed canvas to ${size}x${size}`);
 };

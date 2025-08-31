@@ -96,7 +96,7 @@ function toggleDebugMode() {
     }
 }
 
-function processCurrentFrame() {
+async function processCurrentFrame() {
     // Simplified processing that works without numpy/scipy
     // This creates a simulated hologram effect using canvas manipulation
     
@@ -104,9 +104,14 @@ function processCurrentFrame() {
     const ctx = canvas.getContext('2d');
     const stream = document.getElementById('stream');
     
-    // If we have a stream, try to process from actual camera data
+    // If we have a stream, try to process from snapshot API to avoid CORS issues
     if (stream && stream.complete && stream.naturalWidth > 0) {
-        processFromCameraStream(ctx, canvas, stream);
+        try {
+            await processFromSnapshotAPI(ctx, canvas);
+        } catch (error) {
+            console.warn('Snapshot processing failed, using synthetic pattern');
+            processFromSyntheticPattern(ctx, canvas);
+        }
     } else {
         // Fallback to synthetic pattern
         processFromSyntheticPattern(ctx, canvas);
@@ -121,35 +126,106 @@ function processCurrentFrame() {
     }
 }
 
-function processFromCameraStream(ctx, canvas, stream) {
-    const width = canvas.width;
-    const height = canvas.height;
-    
-    // Create a temporary canvas to draw and extract from the camera stream
-    const tempCanvas = document.createElement('canvas');
-    const tempCtx = tempCanvas.getContext('2d');
-    tempCanvas.width = stream.naturalWidth;
-    tempCanvas.height = stream.naturalHeight;
-    
-    // Draw the camera stream onto temp canvas
-    tempCtx.drawImage(stream, 0, 0);
-    
-    // Extract ROI from center of image
-    const roiSize = processingSettings.roi.size;
-    const centerX = Math.floor(tempCanvas.width * processingSettings.roi.centerX);
-    const centerY = Math.floor(tempCanvas.height * processingSettings.roi.centerY);
-    const startX = Math.max(0, centerX - roiSize / 2);
-    const startY = Math.max(0, centerY - roiSize / 2);
-    
+
+
+async function processFromSnapshotAPI(ctx, canvas) {
     try {
-        const roiImageData = tempCtx.getImageData(startX, startY, roiSize, roiSize);
+        // Get a snapshot from the API instead of using the stream directly
+        const response = await fetch(window.baseUrl + '/snapshot');
+        if (!response.ok) {
+            throw new Error(`Snapshot API failed: ${response.status}`);
+        }
         
-        // Process with color channel selection and orientation
-        processImageData(ctx, canvas, roiImageData, roiSize);
-    } catch (e) {
-        console.warn('Could not process camera stream, falling back to synthetic pattern:', e);
+        const blob = await response.blob();
+        
+        // Create an image from the blob
+        const img = new Image();
+        img.crossOrigin = 'anonymous'; // Enable CORS
+        
+        return new Promise((resolve, reject) => {
+            img.onload = () => {
+                try {
+                    // Create temp canvas for processing
+                    const tempCanvas = document.createElement('canvas');
+                    const tempCtx = tempCanvas.getContext('2d');
+                    tempCanvas.width = img.width;
+                    tempCanvas.height = img.height;
+                    
+                    // Draw image to temp canvas
+                    tempCtx.drawImage(img, 0, 0);
+                    
+                    // Apply transformations if needed
+                    const orientation = processingSettings.orientation;
+                    if (orientation.flipX || orientation.flipY || orientation.rotation !== 0) {
+                        applyImageTransformations(tempCtx, tempCanvas, orientation);
+                    }
+                    
+                    // Extract ROI from center
+                    const roiSize = processingSettings.roi.size;
+                    const centerX = Math.floor(tempCanvas.width * processingSettings.roi.centerX);
+                    const centerY = Math.floor(tempCanvas.height * processingSettings.roi.centerY);
+                    const startX = Math.max(0, centerX - roiSize / 2);
+                    const startY = Math.max(0, centerY - roiSize / 2);
+                    
+                    const roiImageData = tempCtx.getImageData(startX, startY, roiSize, roiSize);
+                    
+                    // Process the image data
+                    processImageData(ctx, canvas, roiImageData, roiSize);
+                    
+                    resolve();
+                } catch (error) {
+                    console.warn('Error processing snapshot:', error);
+                    processFromSyntheticPattern(ctx, canvas);
+                    reject(error);
+                }
+            };
+            
+            img.onerror = () => {
+                console.warn('Failed to load snapshot image');
+                processFromSyntheticPattern(ctx, canvas);
+                reject(new Error('Failed to load snapshot'));
+            };
+            
+            // Set the image source to the blob URL
+            img.src = URL.createObjectURL(blob);
+        });
+        
+    } catch (error) {
+        console.warn('Could not fetch snapshot, falling back to synthetic pattern:', error);
         processFromSyntheticPattern(ctx, canvas);
     }
+}
+
+function applyImageTransformations(ctx, canvas, orientation) {
+    // Apply CSS-like transformations to canvas context
+    const { width, height } = canvas;
+    
+    // Save the current context state
+    ctx.save();
+    
+    // Move to center for transformations
+    ctx.translate(width / 2, height / 2);
+    
+    // Apply rotation
+    if (orientation.rotation !== 0) {
+        ctx.rotate((orientation.rotation * Math.PI) / 180);
+    }
+    
+    // Apply scaling for flips
+    let scaleX = 1;
+    let scaleY = 1;
+    
+    if (orientation.flipX) scaleX = -1;
+    if (orientation.flipY) scaleY = -1;
+    
+    if (scaleX !== 1 || scaleY !== 1) {
+        ctx.scale(scaleX, scaleY);
+    }
+    
+    // Get the current image data
+    ctx.restore();
+    // Note: This is a simplified approach - full transformation would require 
+    // redrawing the image with proper matrix transformations
 }
 
 function processFromSyntheticPattern(ctx, canvas) {

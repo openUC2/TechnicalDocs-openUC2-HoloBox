@@ -57,6 +57,23 @@ def fresnel_propagator(E0, ps, lambda0, z):
     
     return Ef
 
+def apply_image_transformations(image, flip_x=False, flip_y=False, rotation=0):
+    """Apply flip and rotation transformations to image"""
+    if flip_x:
+        image = np.fliplr(image)
+    if flip_y:
+        image = np.flipud(image)
+    
+    # Apply rotation (counter-clockwise)
+    if rotation == 90:
+        image = np.rot90(image, k=1)
+    elif rotation == 180:
+        image = np.rot90(image, k=2)
+    elif rotation == 270:
+        image = np.rot90(image, k=3)
+    
+    return image
+
 def process_image_data(image_data, width, height):
     """Process image data through Fresnel propagation"""
     try:
@@ -74,17 +91,39 @@ def process_image_data(image_data, width, height):
         gray = img_array[:, :, 0] * 0.299 + img_array[:, :, 1] * 0.587 + img_array[:, :, 2] * 0.114
         gray = gray / 255.0
         
-        if debug_mode:
-            console.log(f"Debug: Grayscale shape: {gray.shape}")
+        # Get transformation settings if available
+        flip_x = False
+        flip_y = False
+        rotation = 0
+        roi_size = min(256, min(height, width))  # default
         
-        # Crop to smaller size for faster processing (power of 2)
-        crop_size = min(256, min(height, width))
-        start_y = (height - crop_size) // 2
-        start_x = (width - crop_size) // 2
-        cropped = gray[start_y:start_y + crop_size, start_x:start_x + crop_size]
+        if hasattr(window, 'hologramSettings'):
+            settings = window.hologramSettings
+            if 'orientation' in settings:
+                flip_x = settings['orientation'].get('flipX', False)
+                flip_y = settings['orientation'].get('flipY', False)
+                rotation = settings['orientation'].get('rotation', 0)
+            if 'roi' in settings:
+                roi_size = min(settings['roi'].get('size', roi_size), min(height, width))
         
         if debug_mode:
-            console.log(f"Debug: Crop size: {crop_size}, cropped shape: {cropped.shape}")
+            console.log(f"Debug: Using transformations - flipX: {flip_x}, flipY: {flip_y}, rotation: {rotation}")
+            console.log(f"Debug: ROI size: {roi_size}")
+        
+        # Apply transformations to the full image first
+        transformed = apply_image_transformations(gray, flip_x, flip_y, rotation)
+        
+        if debug_mode:
+            console.log(f"Debug: Transformed shape: {transformed.shape}")
+        
+        # Extract square ROI from center after transformations
+        t_height, t_width = transformed.shape
+        start_y = (t_height - roi_size) // 2
+        start_x = (t_width - roi_size) // 2
+        cropped = transformed[start_y:start_y + roi_size, start_x:start_x + roi_size]
+        
+        if debug_mode:
+            console.log(f"Debug: Cropped ROI shape: {cropped.shape}")
         
         # Estimate amplitude from intensity
         amplitude = np.sqrt(cropped)
@@ -111,26 +150,19 @@ def process_image_data(image_data, width, height):
         if debug_mode:
             console.log(f"Debug: Normalized intensity shape: {intensity.shape}")
         
-        # Resize back to original canvas size using proper interpolation
-        if intensity.shape[0] != height or intensity.shape[1] != width:
+        # For processed output, maintain square aspect ratio
+        # Use the smaller dimension to create a square output
+        output_size = min(height, width)
+        
+        # Resize the intensity to square output
+        if intensity.shape[0] != output_size or intensity.shape[1] != output_size:
             if debug_mode:
-                console.log(f"Debug: Resizing from {intensity.shape} to ({height}, {width})")
+                console.log(f"Debug: Resizing from {intensity.shape} to ({output_size}, {output_size}) for square output")
             
-            # Use a simple but robust interpolation approach
-            # Calculate scaling factors
-            scale_y = height / intensity.shape[0]
-            scale_x = width / intensity.shape[1]
+            # Simple nearest neighbor interpolation to square
+            y_new = np.linspace(0, intensity.shape[0] - 1, output_size)
+            x_new = np.linspace(0, intensity.shape[1] - 1, output_size)
             
-            if debug_mode:
-                console.log(f"Debug: Scale factors - y: {scale_y}, x: {scale_x}")
-            
-            # Create coordinate grids for interpolation
-            y_old = np.arange(intensity.shape[0])
-            x_old = np.arange(intensity.shape[1])
-            y_new = np.linspace(0, intensity.shape[0] - 1, height)
-            x_new = np.linspace(0, intensity.shape[1] - 1, width)
-            
-            # Simple nearest neighbor interpolation
             y_indices = np.round(y_new).astype(int)
             x_indices = np.round(x_new).astype(int)
             
@@ -138,15 +170,15 @@ def process_image_data(image_data, width, height):
             y_indices = np.clip(y_indices, 0, intensity.shape[0] - 1)
             x_indices = np.clip(x_indices, 0, intensity.shape[1] - 1)
             
-            # Create meshgrid and resize
+            # Create meshgrid and resize to square
             Y, X = np.meshgrid(y_indices, x_indices, indexing='ij')
             intensity = intensity[Y, X]
             
             if debug_mode:
-                console.log(f"Debug: Resized intensity shape: {intensity.shape}")
+                console.log(f"Debug: Resized to square: {intensity.shape}")
         
-        # Convert back to RGBA
-        result = np.zeros((height, width, 4), dtype=np.uint8)
+        # Create square RGBA output
+        result = np.zeros((output_size, output_size, 4), dtype=np.uint8)
         result[:, :, 0] = intensity  # R
         result[:, :, 1] = intensity  # G  
         result[:, :, 2] = intensity  # B

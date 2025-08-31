@@ -4,8 +4,11 @@
   <meta charset="UTF-8">
   <title>HoloBox Camera & Processor</title>
   <link href="./css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="./css/pyscript-core.css" />
-  <script type="module" src="./js/pyscript-core.js"></script>  
+  
+  <!-- Use CDN PyScript for reliability -->
+  <script type="module" src="https://pyscript.net/releases/2024.8.2/core.js"></script>
+  <link rel="stylesheet" href="https://pyscript.net/releases/2024.8.2/core.css">
+  
   <style>
     #stream, #processed { max-width: 100%; border: 1px solid #ccc; margin: 10px; transition: transform 0.3s ease; }
     .video-container { display: flex; justify-content: space-around; flex-wrap: wrap; }
@@ -87,6 +90,9 @@
       height: auto;
       display: block;
       margin: 0 auto;
+      aspect-ratio: 1 / 1;
+      object-fit: contain;
+      border: 1px solid #ccc;
     }
   </style>
 </head>
@@ -95,8 +101,8 @@
 <nav class="navbar navbar-dark bg-dark px-3">
   <span class="navbar-brand">HoloBox Camera & Processing</span>
   <div class="d-flex">
-    <input id="host" class="form-control me-2" style="width:20rem" placeholder="Auto-detected" readonly>
-    <small class="text-light align-self-center ms-2">URL auto-detected from browser</small>
+    <input id="host" class="form-control me-2" style="width:20rem" placeholder="Enter API URL">
+    <small class="text-light align-self-center ms-2">Edit to change API URL</small>
   </div>
 </nav>
 
@@ -119,7 +125,7 @@
     </div>
     <div class="text-center">
       <h5>Fresnel Propagated</h5>
-      <canvas id="processed" width="640" height="480"></canvas>
+      <canvas id="processed" width="480" height="480"></canvas>
     </div>
   </div>
 
@@ -318,16 +324,49 @@
 
 </div>
 
-<!-- Note: PyScript functionality disabled for offline use -->
-<!-- In offline mode, hologram processing will use pre-computed examples -->
-<!-- py-config packages = ["numpy", "scipy"] -->
+<!-- PyScript configuration with reliable package loading -->
+<py-config>
+  name = "holobox-processor"
+  version = "1.0.0"
+  packages = ["numpy", "scipy"]
+</py-config>
 
-<!-- External PyScript file (disabled for offline mode) -->
-<!-- py-script src="./hologram_processing.py"></py-script -->
+<!-- Package installation and hologram processing -->
+<script type="py">
+  # Load packages reliably
+  from pyscript import document
+  
+  print("🔧 Loading hologram processing packages...")
+  
+  try:
+      # Import packages (they should be loaded by py-config)
+      import numpy as np
+      import scipy
+      print("✅ Packages loaded successfully!")
+      print(f"NumPy version: {np.__version__}")
+      
+      # Set flag that packages are ready
+      import js
+      js.pyodidePackagesReady = True
+      js.numpy = np  # Make numpy available to JavaScript
+      
+      # Trigger any waiting JavaScript functions
+      from js import window
+      if hasattr(window, 'onPyodideReady'):
+          window.onPyodideReady()
+          
+  except Exception as e:
+      print(f"❌ Package loading failed: {e}")
+      import js
+      js.pyodidePackagesReady = False
+</script>
+
+<!-- External PyScript file -->
+<script type="py" src="./hologram_processing.py"></script>
 
 <!-- External JavaScript file -->
 <script src="./camera_controls.js"></script>
-
+  
 <!-- Offline hologram processing (JavaScript alternative to PyScript) -->
 <script src="./hologram_processing_offline.js"></script>
 

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Offline PyScript Test</title>
+  <script type="module" src="/js/pyscript/core.js"></script>
+  <link rel="stylesheet" href="/js/pyscript/core.css">
+
+  <style>
+    body { background: #111; color: #eee; font-family: sans-serif; text-align: center; }
+    canvas { margin-top: 20px; border: 1px solid #555; }
+  </style>
+</head>
+<body>
+  <h1>Offline PyScript + NumPy Test</h1>
+  <p>Random image generated with NumPy (offline)</p>
+
+  <!-- This is where we’ll show the image -->
+  <canvas id="rndcanvas" width="256" height="256"></canvas>
+
+  <py-config>
+    interpreter = "/js/pyodide/pyodide.mjs"    
+    packages = ["numpy", "matplotlib"]
+  </py-config>
+
+  <py-script>
+from js import document
+import numpy as np
+from pyodide.ffi import to_js
+
+# Create random image 256x256
+img = (np.random.rand(256, 256, 3) * 255).astype(np.uint8)
+
+# Draw on canvas
+canvas = document.getElementById("rndcanvas")
+ctx = canvas.getContext("2d")
+# Convert numpy array -> ImageData via JS
+image_data = ctx.createImageData(256, 256)
+# Flatten (RGB) to RGBA (append alpha=255)
+rgba = np.concatenate([img, 255*np.ones((256,256,1),dtype=np.uint8)], axis=-1)
+js_array = to_js(rgba.flatten().tolist(), dict_converter=None)
+image_data.data.set(js_array)
+ctx.putImageData(image_data, 0, 0)
+  </py-script>
+</body>
+</html>
