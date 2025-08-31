@@ -175,7 +175,7 @@ def process_image_for_hologram(width=256, height=256):
             if flip_y_elem:
                 flip_y = flip_y_elem.checked
                 
-            rotation_elem = document.getElementById('rotation')
+            rotation_elem = document.getElementById('rotationAngle')
             if rotation_elem:
                 rotation = int(rotation_elem.value)
                 
@@ -285,7 +285,7 @@ def process_image_for_hologram(width=256, height=256):
             console.log(f"Debug: Full traceback: {traceback.format_exc()}")
         return False
 
-def toggle_processing():
+def toggle_processing(event=None):
     """Toggle real-time processing on/off"""
     global processing_enabled, processing_interval
     
@@ -308,11 +308,11 @@ def toggle_processing():
         document.getElementById('processing-enabled').textContent = 'Disabled'
         document.getElementById('status').textContent = 'Processing stopped'
 
-def process_single_frame():
+def process_single_frame(event=None):
     """Process a single frame"""
     process_image_for_hologram()
 
-def toggle_debug_mode():
+def toggle_debug_mode(event=None):
     """Toggle debug mode on/off"""
     global debug_mode
     
@@ -327,7 +327,7 @@ def toggle_debug_mode():
         document.getElementById('debug-status').textContent = 'Disabled'
         console.log("Debug mode disabled")
 
-def update_parameters():
+def update_parameters(event=None):
     """Update processing parameters from sliders"""
     global current_wavelength, current_pixelsize, current_dz
     
