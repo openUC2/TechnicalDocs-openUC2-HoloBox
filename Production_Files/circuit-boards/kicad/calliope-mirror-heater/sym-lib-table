@@ -1,0 +1,4 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "TP5709S5_lib")(type "KiCad")(uri "/${KIPRJMOD}/../lib/TP5709S5_lib.kicad_sym")(options "")(descr ""))
+)

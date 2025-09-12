@@ -23,3 +23,33 @@ Scripts/holobox-sdcard-*.img
 *.img
 *.img.zip
 *.img.xz
+
+#Kicad:
+# Temporary files
+*.000
+*.bak
+*.bck
+*.kicad_pcb-bak
+*~
+_autosave-*
+*.tmp
+*-backups
+backups/
+*.kicad_prl
+*.sch-bak
+*.kicad_sch-bak
+*~
+_autosave-*
+\#auto_saved_files#
+*.tmp
+*-save.pro
+*-save.kicad_pcb
+fp-info-cache
+~*.lck
+
+# Netlist files (exported from Eeschema)
+*.net
+
+# Autorouter files (exported from Pcbnew)
+.dsn
+.ses
