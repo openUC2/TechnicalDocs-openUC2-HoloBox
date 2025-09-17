@@ -2,6 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <!-- iPad/iOS specific meta tags for better compatibility -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="format-detection" content="telephone=no">
   <title>HoloBox Camera & Processor</title>
   <link href="./css/bootstrap.min.css" rel="stylesheet">
   
@@ -403,7 +408,10 @@
     <div class="text-center">
       <h5>Original Camera Stream</h5>
       <div class="stream-container">
-        <img id="stream" alt="Stream not running">
+        <img id="stream" alt="Stream not running" 
+             style="max-width: 100%; height: auto; display: block; margin: 0 auto;"
+             onload="this.style.display='block'" 
+             onerror="this.style.display='none'; console.error('Stream failed to load');">
         <div id="boundary-box" class="boundary-box hidden"></div>
       </div>
       <div class="mt-2">
@@ -432,22 +440,120 @@
           <button id="stopBtn" class="btn btn-danger">Stop Stream</button>
         </div>
         <div class="col-auto">
-          <div class="input-group">
-            <span class="input-group-text">Exposure (µs)</span>
-            <input id="exposure" type="number" class="form-control" min="1" value="10000">
-            <button id="setExposure" class="btn btn-primary">Set</button>
-          </div>
-        </div>
-        <div class="col-auto">
-          <div class="input-group">
-            <span class="input-group-text">Analogue Gain</span>
-            <input id="gain" type="number" step="0.01" class="form-control" min="0" value="1.0">
-            <button id="setGain" class="btn btn-primary">Set</button>
-          </div>
-        </div>
-        <div class="col-auto">
           <button id="captureBtn" class="btn btn-warning">Capture JPEG</button>
           <a id="downloadLink" class="btn btn-outline-secondary d-none" download="capture.jpg">Download</a>
+        </div>
+        <div class="col-auto">
+          <button id="loadStatus" class="btn btn-info">Load Camera Status</button>
+        </div>
+      </div>
+      
+      <!-- Resolution Control -->
+      <div class="row g-3 mt-2">
+        <div class="col-md-4">
+          <h6 class="mb-2">Resolution</h6>
+          <div class="input-group">
+            <select class="form-select" id="resolution-select">
+              <option value="640x480" selected>640x480 (VGA)</option>
+              <option value="800x600">800x600 (SVGA)</option>
+              <option value="1024x768">1024x768 (XGA)</option>
+              <option value="1280x720">1280x720 (HD)</option>
+              <option value="1920x1080">1920x1080 (FHD)</option>
+            </select>
+            <button id="setResolution" class="btn btn-primary">Set</button>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <h6 class="mb-2">Color Mode</h6>
+          <div class="input-group">
+            <select class="form-select" id="color-mode-select">
+              <option value="rgb" selected>RGB (Full Color)</option>
+              <option value="gray">Grayscale</option>
+              <option value="r">Red Channel</option>
+              <option value="g">Green Channel</option>
+              <option value="b">Blue Channel</option>
+            </select>
+            <button id="setColorMode" class="btn btn-primary">Set</button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Exposure Controls -->
+      <div class="row g-3 mt-2">
+        <div class="col-12">
+          <h6 class="mb-2">Exposure Control</h6>
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="exposure-auto" checked>
+            <label class="form-check-label" for="exposure-auto">Auto Exposure</label>
+          </div>
+          <div class="row g-2">
+            <div class="col-md-4">
+              <div class="input-group">
+                <span class="input-group-text">Exposure (µs)</span>
+                <input id="manual-exposure" type="number" class="form-control" min="1" max="1000000" value="10000" disabled>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="input-group">
+                <span class="input-group-text">Analogue Gain</span>
+                <input id="manual-gain" type="number" step="0.1" class="form-control" min="1.0" max="16.0" value="1.0" disabled>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <button id="set-manual-exposure" class="btn btn-primary w-100" disabled>Set Manual</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- White Balance Controls -->
+      <div class="row g-3 mt-2">
+        <div class="col-12">
+          <h6 class="mb-2">White Balance</h6>
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="awb-auto" checked>
+            <label class="form-check-label" for="awb-auto">Auto White Balance</label>
+          </div>
+          <div class="row g-2">
+            <div class="col-md-4">
+              <div class="input-group">
+                <span class="input-group-text">Red Gain</span>
+                <input id="awb-red" type="number" step="0.1" class="form-control" min="0.0" max="8.0" value="1.5" disabled>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="input-group">
+                <span class="input-group-text">Blue Gain</span>
+                <input id="awb-blue" type="number" step="0.1" class="form-control" min="0.0" max="8.0" value="1.5" disabled>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <button id="set-awb-gains" class="btn btn-primary w-100" disabled>Set Manual WB</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Legacy Controls (for backward compatibility) -->
+      <div class="row g-3 mt-2">
+        <div class="col-12">
+          <h6 class="mb-2">Legacy Controls</h6>
+          <div class="row g-2">
+            <div class="col-auto">
+              <div class="input-group">
+                <span class="input-group-text">Exposure (µs)</span>
+                <input id="exposure" type="number" class="form-control" min="1" value="10000">
+                <button id="setExposure" class="btn btn-primary">Set</button>
+              </div>
+            </div>
+            <div class="col-auto">
+              <div class="input-group">
+                <span class="input-group-text">Analogue Gain</span>
+                <input id="gain" type="number" step="0.01" class="form-control" min="0" value="1.0">
+                <button id="setGain" class="btn btn-primary">Set</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       
@@ -455,7 +561,7 @@
       <div class="row g-3 mt-2">
         <div class="col-12">
           <div class="alert alert-info py-2 mb-0">
-            <small><strong>Stream Latency:</strong> Optimized for ~20 FPS. Latency depends on network conditions and Pi hardware capabilities.</small>
+            <small><strong>Stream Info:</strong> MJPEG at ~20 FPS. Optimized for iPad/Safari compatibility. HTTP-only on port 80.</small>
           </div>
         </div>
       </div>
