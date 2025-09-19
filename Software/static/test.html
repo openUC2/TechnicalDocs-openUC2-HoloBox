@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>HoloBox Stream Test - Browser Compatibility</title>
+  <style>
+    body { 
+      font-family: Arial, sans-serif; 
+      margin: 20px; 
+      background: #1a1a1a; 
+      color: #e0e0e0; 
+    }
+    .container { max-width: 800px; margin: 0 auto; }
+    .stream-container { 
+      text-align: center; 
+      margin: 20px 0; 
+      border: 2px solid #444; 
+      padding: 10px; 
+      border-radius: 8px; 
+    }
+    img { 
+      max-width: 100%; 
+      height: auto; 
+      border: 1px solid #666; 
+      background: #2d2d2d; 
+    }
+    .controls { 
+      margin: 20px 0; 
+      text-align: center; 
+    }
+    button { 
+      padding: 10px 20px; 
+      margin: 5px; 
+      font-size: 16px; 
+      border: none; 
+      border-radius: 4px; 
+      cursor: pointer; 
+      min-height: 44px; /* Better for mobile */
+    }
+    .btn-primary { background: #007bff; color: white; }
+    .btn-success { background: #28a745; color: white; }
+    .btn-danger { background: #dc3545; color: white; }
+    .btn-info { background: #17a2b8; color: white; }
+    .status { 
+      padding: 10px; 
+      margin: 10px 0; 
+      border-radius: 4px; 
+      background: #2d2d2d; 
+      border: 1px solid #444; 
+    }
+    .info { background: rgba(0, 123, 255, 0.1); border-color: #007bff; }
+    .error { background: rgba(220, 53, 69, 0.1); border-color: #dc3545; }
+    .success { background: rgba(40, 167, 69, 0.1); border-color: #28a745; }
+    select, input { 
+      padding: 8px; 
+      margin: 5px; 
+      border-radius: 4px; 
+      border: 1px solid #666; 
+      background: #2d2d2d; 
+      color: #e0e0e0; 
+    }
+    .test-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+      margin: 20px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>HoloBox Stream Test</h1>
+    <p>Browser Compatibility Test Page</p>
+    
+    <div class="status info">
+      <strong>Browser:</strong> <span id="browser-info"></span><br>
+      <strong>User Agent:</strong> <span id="user-agent"></span><br>
+      <strong>Platform:</strong> <span id="platform"></span>
+    </div>
+    
+    <div class="controls">
+      <label>API URL:</label>
+      <input type="text" id="api-url" value="http://192.168.4.1" style="width: 200px;">
+      <button class="btn-info" onclick="updateApiUrl()">Update</button>
+    </div>
+    
+    <div class="stream-container">
+      <h3>Camera Stream</h3>
+      <img id="stream" alt="Click 'Start Stream' to begin" style="width: 100%; max-width: 640px;">
+      <div class="controls">
+        <button class="btn-success" onclick="startStream()">Start Stream</button>
+        <button class="btn-danger" onclick="stopStream()">Stop Stream</button>
+        <button class="btn-primary" onclick="testSnapshot()">Test Snapshot</button>
+      </div>
+    </div>
+    
+    <div class="test-grid">
+      <div>
+        <h4>Camera Tests</h4>
+        <button class="btn-primary" onclick="testStatus()">Status</button>
+        <button class="btn-primary" onclick="testResolution()">Resolution</button>
+        <button class="btn-primary" onclick="testExposure()">Exposure</button>
+      </div>
+      <div>
+        <h4>Stream Tests</h4>
+        <button class="btn-primary" onclick="testStreamEndpoints()">Endpoints</button>
+        <button class="btn-primary" onclick="testStreamReload()">Reload</button>
+        <button class="btn-primary" onclick="measureLatency()">Latency</button>
+      </div>
+    </div>
+    
+    <div class="status" id="status">Ready for testing</div>
+    
+    <div class="status" id="test-results" style="display: none;">
+      <h4>Test Results</h4>
+      <div id="results-content"></div>
+    </div>
+  </div>
+
+  <script>
+    let apiUrl = 'http://192.168.4.1';
+    
+    // Initialize browser info
+    document.getElementById('browser-info').textContent = navigator.appName + ' ' + navigator.appVersion.split(' ')[0];
+    document.getElementById('user-agent').textContent = navigator.userAgent;
+    document.getElementById('platform').textContent = navigator.platform;
+    
+    const log = (message, type = 'info') => {
+      const status = document.getElementById('status');
+      status.textContent = message;
+      status.className = `status ${type}`;
+      console.log(`[${type.toUpperCase()}] ${message}`);
+    };
+    
+    const api = async (path, options = {}) => {
+      try {
+        const response = await fetch(apiUrl + path, {
+          ...options,
+          headers: {
+            'Cache-Control': 'no-cache',
+            ...options.headers
+          }
+        });
+        return response;
+      } catch (error) {
+        throw new Error(`Network error: ${error.message}`);
+      }
+    };
+    
+    const updateApiUrl = () => {
+      apiUrl = document.getElementById('api-url').value.trim();
+      log(`API URL updated to: ${apiUrl}`);
+    };
+    
+    const startStream = () => {
+      const stream = document.getElementById('stream');
+      const timestamp = new Date().getTime();
+      stream.src = `${apiUrl}/api/stream.mjpg?t=${timestamp}`;
+      
+      stream.onload = () => {
+        log('Stream started successfully', 'success');
+      };
+      
+      stream.onerror = () => {
+        log('Stream failed to load - check network and URL', 'error');
+      };
+      
+      // Add tap-to-retry for mobile
+      stream.onclick = () => {
+        if (!stream.complete || stream.naturalWidth === 0) {
+          log('Retrying stream load...');
+          const newTimestamp = new Date().getTime();
+          stream.src = `${apiUrl}/api/stream.mjpg?t=${newTimestamp}`;
+        }
+      };
+      
+      log('Starting stream...');
+    };
+    
+    const stopStream = () => {
+      const stream = document.getElementById('stream');
+      stream.src = '';
+      log('Stream stopped');
+    };
+    
+    const testSnapshot = async () => {
+      try {
+        log('Testing snapshot...');
+        const response = await api('/snapshot');
+        if (response.ok) {
+          const blob = await response.blob();
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'test-snapshot.jpg';
+          link.click();
+          log('Snapshot test successful', 'success');
+        } else {
+          log(`Snapshot failed: ${response.status}`, 'error');
+        }
+      } catch (error) {
+        log(`Snapshot error: ${error.message}`, 'error');
+      }
+    };
+    
+    const testStatus = async () => {
+      try {
+        log('Testing camera status...');
+        const response = await api('/api/camera/status');
+        if (response.ok) {
+          const data = await response.json();
+          log(`Status: ${JSON.stringify(data)}`, 'success');
+        } else {
+          log(`Status failed: ${response.status}`, 'error');
+        }
+      } catch (error) {
+        log(`Status error: ${error.message}`, 'error');
+      }
+    };
+    
+    const testResolution = async () => {
+      try {
+        log('Testing resolution change...');
+        const response = await api('/api/camera/resolution', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ width: 800, height: 600 })
+        });
+        if (response.ok) {
+          const data = await response.json();
+          log(`Resolution set: ${data.width}x${data.height}`, 'success');
+        } else {
+          log(`Resolution failed: ${response.status}`, 'error');
+        }
+      } catch (error) {
+        log(`Resolution error: ${error.message}`, 'error');
+      }
+    };
+    
+    const testExposure = async () => {
+      try {
+        log('Testing exposure mode...');
+        const response = await api('/api/camera/exposure_mode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ auto: true })
+        });
+        if (response.ok) {
+          const data = await response.json();
+          log(`Exposure mode: ${data.exposure_auto ? 'auto' : 'manual'}`, 'success');
+        } else {
+          log(`Exposure failed: ${response.status}`, 'error');
+        }
+      } catch (error) {
+        log(`Exposure error: ${error.message}`, 'error');
+      }
+    };
+    
+    const testStreamEndpoints = async () => {
+      const endpoints = ['/stream', '/api/stream.mjpg'];
+      for (const endpoint of endpoints) {
+        try {
+          log(`Testing ${endpoint}...`);
+          const response = await fetch(apiUrl + endpoint, { method: 'HEAD' });
+          log(`${endpoint}: ${response.status} ${response.statusText}`, response.ok ? 'success' : 'error');
+        } catch (error) {
+          log(`${endpoint}: ${error.message}`, 'error');
+        }
+      }
+    };
+    
+    const testStreamReload = () => {
+      const stream = document.getElementById('stream');
+      if (stream.src) {
+        const baseUrl = stream.src.split('?')[0];
+        stream.src = baseUrl + '?t=' + new Date().getTime();
+        log('Stream reloaded with new timestamp');
+      } else {
+        log('No stream to reload', 'error');
+      }
+    };
+    
+    const measureLatency = () => {
+      const startTime = performance.now();
+      const img = new Image();
+      img.onload = () => {
+        const latency = performance.now() - startTime;
+        log(`Stream latency: ${latency.toFixed(2)}ms`, 'success');
+      };
+      img.onerror = () => {
+        log('Latency test failed', 'error');
+      };
+      img.src = `${apiUrl}/snapshot?t=${new Date().getTime()}`;
+      log('Measuring latency...');
+    };
+    
+    // Auto-detect if we're on mobile and show helpful info
+    if (/iPad|iPhone|iPod|Android/i.test(navigator.userAgent)) {
+      log('Mobile device detected - tap stream image if it fails to load');
+    }
+    
+    // Initialize API URL from current location if possible
+    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      apiUrl = `http://${window.location.hostname}`;
+      document.getElementById('api-url').value = apiUrl;
+    }
+  </script>
+</body>
+</html>

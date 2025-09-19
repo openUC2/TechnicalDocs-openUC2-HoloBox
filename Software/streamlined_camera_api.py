@@ -24,8 +24,11 @@ import sys
 try:
     from picamera2 import Picamera2
     CAMERA_AVAILABLE = True
-except ImportError:
-    print("Warning: picamera2 not available, using mock camera")
+    picam = Picamera2()
+    picam.configure(picam.create_video_configuration(main={"size": (640, 480)}))
+    picam.start()    
+except Exception as e:
+    print(f"Warning: picamera2 not available, using mock camera. Error: {e}")
     CAMERA_AVAILABLE = False
     
     class MockPicamera2:
@@ -61,7 +64,7 @@ except ImportError:
         def release(self):
             pass
     
-    Picamera2 = MockPicamera2
+    picam = MockPicamera2()
 
 app = FastAPI(title="Streamlined Camera API", description="Camera streaming and processing API")
 
@@ -74,13 +77,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize camera
-if CAMERA_AVAILABLE:
-    picam = Picamera2()
-    picam.configure(picam.create_video_configuration(main={"size": (640, 480)}))
-    picam.start()
-else:
-    picam = MockPicamera2()
+
+
+# Camera state tracking
+camera_state = {
+    "exposure_auto": True,
+    "exposure_us": 10000,
+    "analogue_gain": 1.0,
+    "awb_auto": True,
+    "awb_gains": {"red": 1.5, "blue": 1.5},
+    "resolution": {"width": 640, "height": 480},
+    "color_mode": "rgb",
+    "streaming": False
+}
 
 # Serve static files
 static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
@@ -143,6 +152,27 @@ class CameraSettings(BaseModel):
     exposure_us: int | None = None   # microseconds
     gain: float | None = None        # analogue gain
 
+class ExposureMode(BaseModel):
+    auto: bool
+
+class ExposureSettings(BaseModel):
+    exposure_us: int
+    analogue_gain: float
+
+class ResolutionSettings(BaseModel):
+    width: int
+    height: int
+
+class AWBMode(BaseModel):
+    auto: bool
+
+class AWBGains(BaseModel):
+    red: float
+    blue: float
+
+class ColorMode(BaseModel):
+    mode: str  # "rgb", "gray", "r", "g", "b"
+
 class WiFiConfig(BaseModel):
     ssid: str
     password: str | None = None
@@ -189,17 +219,27 @@ def stream():
     """Get continuous MJPEG stream"""
     boundary = b"frame"
     def gen():
-        while True:
-            yield (
-                b"--" + boundary +
-                b"\r\nContent-Type: image/jpeg\r\n\r\n" +
-                _jpeg(_capture()) + b"\r\n"
-            )
-            time.sleep(0.05)  # ~20 FPS
+        camera_state["streaming"] = True
+        try:
+            while True:
+                yield (
+                    b"--" + boundary +
+                    b"\r\nContent-Type: image/jpeg\r\nCache-Control: no-store\r\n\r\n" +
+                    _jpeg(_capture()) + b"\r\n"
+                )
+                time.sleep(0.05)  # ~20 FPS
+        finally:
+            camera_state["streaming"] = False
     return StreamingResponse(
         gen(),
         media_type=f"multipart/x-mixed-replace; boundary={boundary.decode()}",
+        headers={"Cache-Control": "no-store"}
     )
+
+@app.get("/api/stream.mjpg", summary="MJPEG stream (API endpoint)")
+def api_stream():
+    """Get continuous MJPEG stream - API endpoint for better compatibility"""
+    return stream()
 
 @app.post("/settings", summary="Set camera parameters")
 def set_settings(s: CameraSettings):
@@ -230,6 +270,140 @@ def get_settings():
         }
     else:
         return {"exposure_us": 10000, "gain": 1.0}
+
+@app.post("/api/camera/exposure_mode", summary="Set exposure mode (auto/manual)")
+def set_exposure_mode(mode: ExposureMode):
+    """Set camera exposure mode"""
+    camera_state["exposure_auto"] = mode.auto
+    
+    if CAMERA_AVAILABLE:
+        picam.set_controls({"AeEnable": mode.auto})
+    else:
+        print(f"Mock: Would set AeEnable to {mode.auto}")
+    
+    return {"exposure_auto": mode.auto}
+
+@app.post("/api/camera/exposure", summary="Set manual exposure and gain")
+def set_exposure_manual(settings: ExposureSettings):
+    """Set manual exposure time and analogue gain"""
+    if camera_state["exposure_auto"]:
+        raise HTTPException(400, "Cannot set manual exposure when auto mode is enabled")
+    
+    # Validate and clamp values
+    exposure_us = max(1, min(1000000, settings.exposure_us))  # 1µs to 1s
+    analogue_gain = max(1.0, min(16.0, settings.analogue_gain))  # 1x to 16x
+    
+    camera_state["exposure_us"] = exposure_us
+    camera_state["analogue_gain"] = analogue_gain
+    
+    if CAMERA_AVAILABLE:
+        picam.set_controls({
+            "ExposureTime": exposure_us,
+            "AnalogueGain": analogue_gain
+        })
+    else:
+        print(f"Mock: Would set ExposureTime={exposure_us}, AnalogueGain={analogue_gain}")
+    
+    return {
+        "exposure_us": exposure_us,
+        "analogue_gain": analogue_gain
+    }
+
+@app.post("/api/camera/resolution", summary="Set camera resolution")
+def set_resolution(resolution: ResolutionSettings):
+    """Set camera resolution and restart stream if needed"""
+    # Validate resolution
+    width = max(64, min(4096, resolution.width))
+    height = max(64, min(4096, resolution.height))
+    
+    camera_state["resolution"] = {"width": width, "height": height}
+    
+    if CAMERA_AVAILABLE:
+        # Stop and reconfigure camera
+        picam.stop()
+        new_config = picam.create_video_configuration(main={"size": (width, height)})
+        picam.configure(new_config)
+        picam.start()
+    else:
+        print(f"Mock: Would reconfigure to {width}x{height}")
+    
+    return {
+        "width": width,
+        "height": height,
+        "effective_resolution": {"width": width, "height": height}
+    }
+
+@app.post("/api/camera/awb_mode", summary="Set white balance mode")
+def set_awb_mode(mode: AWBMode):
+    """Set white balance mode (auto/manual)"""
+    camera_state["awb_auto"] = mode.auto
+    
+    if CAMERA_AVAILABLE:
+        picam.set_controls({"AwbEnable": mode.auto})
+    else:
+        print(f"Mock: Would set AwbEnable to {mode.auto}")
+    
+    return {"awb_auto": mode.auto}
+
+@app.post("/api/camera/awb_gains", summary="Set manual white balance gains")
+def set_awb_gains(gains: AWBGains):
+    """Set manual white balance gains"""
+    if camera_state["awb_auto"]:
+        raise HTTPException(400, "Cannot set manual white balance when auto mode is enabled")
+    
+    # Validate and clamp gains
+    red_gain = max(0.0, min(8.0, gains.red))
+    blue_gain = max(0.0, min(8.0, gains.blue))
+    
+    camera_state["awb_gains"] = {"red": red_gain, "blue": blue_gain}
+    
+    if CAMERA_AVAILABLE:
+        picam.set_controls({"ColourGains": (red_gain, blue_gain)})
+    else:
+        print(f"Mock: Would set ColourGains to ({red_gain}, {blue_gain})")
+    
+    return {
+        "red": red_gain,
+        "blue": blue_gain
+    }
+
+@app.post("/api/camera/color", summary="Set color channel mode")
+def set_color_mode(color: ColorMode):
+    """Set color channel selection"""
+    valid_modes = ["rgb", "gray", "r", "g", "b"]
+    if color.mode not in valid_modes:
+        raise HTTPException(400, f"Invalid color mode. Must be one of: {valid_modes}")
+    
+    camera_state["color_mode"] = color.mode
+    
+    # Note: Color channel processing would be handled in the capture/processing pipeline
+    # For now, we just store the preference
+    print(f"Color mode set to: {color.mode}")
+    
+    return {"color_mode": color.mode}
+
+@app.get("/api/camera/status", summary="Get camera status")
+def get_camera_status():
+    """Get comprehensive camera status"""
+    if CAMERA_AVAILABLE:
+        try:
+            md = picam.capture_metadata()
+            # Update state with actual camera values
+            camera_state["exposure_us"] = md.get("ExposureTime", camera_state["exposure_us"])
+            camera_state["analogue_gain"] = md.get("AnalogueGain", camera_state["analogue_gain"])
+        except:
+            pass  # Use stored values if metadata unavailable
+    
+    return {
+        "exposure_auto": camera_state["exposure_auto"],
+        "exposure_us": camera_state["exposure_us"],
+        "analogue_gain": camera_state["analogue_gain"],
+        "awb_auto": camera_state["awb_auto"],
+        "awb_gains": camera_state["awb_gains"],
+        "resolution": camera_state["resolution"],
+        "color_mode": camera_state["color_mode"],
+        "streaming": camera_state["streaming"]
+    }
 
 @app.get("/stats", summary="Image statistics")
 def stats():
@@ -381,10 +555,10 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="Streamlined Camera API Server")
     parser.add_argument("--host", default="0.0.0.0", help="Host to bind to")
-    parser.add_argument("--port", default=8000, type=int, help="Port to bind to")
+    parser.add_argument("--port", default=80, type=int, help="Port to bind to")
     parser.add_argument("--ssl-keyfile", help="SSL private key file")
     parser.add_argument("--ssl-certfile", help="SSL certificate file")
-    parser.add_argument("--no-ssl", action="store_true", help="Disable automatic SSL certificate generation")
+    parser.add_argument("--no-ssl", action="store_true", default=True, help="Disable automatic SSL certificate generation (default: disabled)")
     args = parser.parse_args()
     
     # Configure SSL
