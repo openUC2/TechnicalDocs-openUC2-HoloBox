@@ -1,0 +1,5 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "testpoint_solid-zone-connection_lib")(type "KiCad")(uri "${KIPRJMOD}/../lib/testpoint_solid-zone-connection_lib.pretty")(options "")(descr ""))
+  (lib (name "dpdt-slide-switch")(type "KiCad")(uri "${KIPRJMOD}/../lib/dpdt-slide-switch.pretty")(options "")(descr ""))
+)
