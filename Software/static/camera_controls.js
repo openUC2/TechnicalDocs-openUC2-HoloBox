@@ -12,6 +12,21 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('setGain').onclick = setGain;
     document.getElementById('captureBtn').onclick = capture;
     
+    // New camera controls
+    document.getElementById('loadStatus').onclick = loadCameraStatus;
+    document.getElementById('setResolution').onclick = setResolution;
+    document.getElementById('setColorMode').onclick = setColorMode;
+    document.getElementById('set-manual-exposure').onclick = setManualExposure;
+    document.getElementById('set-awb-gains').onclick = setAWBGains;
+    
+    // Auto/Manual toggles
+    document.getElementById('exposure-auto').onchange = function() {
+        setExposureMode(this.checked);
+    };
+    document.getElementById('awb-auto').onchange = function() {
+        setAWBMode(this.checked);
+    };
+    
     // WiFi management event listeners
     document.getElementById('refreshStatus').onclick = refreshWifiStatus;
     document.getElementById('scanNetworks').onclick = scanNetworks;
@@ -40,6 +55,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize
     document.getElementById('status').textContent = 'Ready - Click Start Stream to begin';
     refreshWifiStatus(); // Load initial WiFi status
+    loadCameraStatus(); // Load initial camera status
     
     // Initialize processing canvas to square aspect ratio
     initializeProcessedCanvas();
@@ -54,12 +70,14 @@ const initializeAutoDetectedUrl = () => {
     // Always use HTTP as requested by user
     let detectedUrl;
     
-    // If we're accessing via specific host, use current host with port 8000
+    // If we're accessing via specific host, use current host with port 80
     if (currentHost !== '127.0.0.1') {
-        detectedUrl = `https://${currentHost}:${currentPort || 8000}`;
+        detectedUrl = currentPort && currentPort !== '80' 
+            ? `http://${currentHost}:${currentPort}` 
+            : `http://${currentHost}`;
     } else {
         // Default fallback for local development
-        detectedUrl = 'https://192.168.4.1:8000';
+        detectedUrl = 'http://192.168.4.1';
     }
     
     // Only set the value if the field is empty (initial load)
@@ -85,11 +103,32 @@ const updateBaseUrl = () => {
     }
 };
 
-const api = (path, opt = {}) => fetch(baseUrl + path, opt);
+const api = (path, opt = {}) => {
+    // Add timeout for better mobile reliability
+    const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Request timeout')), 10000); // 10 second timeout
+    });
+    
+    const fetchPromise = fetch(baseUrl + path, {
+        ...opt,
+        headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+            ...opt.headers
+        }
+    });
+    
+    return Promise.race([fetchPromise, timeoutPromise]);
+};
 
 const startStream = () => {
     const stream = document.getElementById('stream');
-    stream.src = baseUrl + '/stream';
+    // Use the more compatible MJPEG stream endpoint
+    stream.src = baseUrl + '/api/stream.mjpg';
+    
+    // Add timestamp to prevent caching issues on mobile
+    const timestamp = new Date().getTime();
+    stream.src += '?t=' + timestamp;
     
     stream.onload = () => {
         updateStreamAspectRatio();
@@ -97,6 +136,35 @@ const startStream = () => {
             updateBoundaryBox();
         }
         document.getElementById('status').textContent = 'Stream started';
+        console.log('Stream loaded successfully');
+    };
+    
+    // Handle error for better debugging
+    stream.onerror = () => {
+        document.getElementById('status').textContent = 'Stream failed to load - check connection';
+        console.error('Stream failed to load from:', stream.src);
+        
+        // On mobile devices, suggest manual refresh
+        if (/iPad|iPhone|iPod|Android/i.test(navigator.userAgent)) {
+            setTimeout(() => {
+                document.getElementById('status').textContent = 'Stream error - try tapping the image area or refresh page';
+            }, 2000);
+        }
+    };
+    
+    // Handle abort (common on mobile when switching networks)
+    stream.onabort = () => {
+        console.log('Stream loading aborted');
+        document.getElementById('status').textContent = 'Stream loading interrupted';
+    };
+    
+    // Add click handler for mobile devices to retry loading
+    stream.onclick = () => {
+        if (!stream.complete || stream.naturalWidth === 0) {
+            console.log('Retrying stream load due to user tap');
+            const currentSrc = stream.src.split('?')[0]; // Remove timestamp
+            stream.src = currentSrc + '?t=' + new Date().getTime();
+        }
     };
     
     // Handle window resize
@@ -105,6 +173,8 @@ const startStream = () => {
             updateBoundaryBox();
         }
     });
+    
+    console.log('Starting stream from:', stream.src);
 };
 
 const stopStream = () => {
@@ -150,6 +220,200 @@ const capture = () => {
             link.classList.remove('d-none');
             document.getElementById('status').textContent = 'Image captured';
         });
+};
+
+// New Camera Control Functions
+const setExposureMode = (auto) => {
+    api('/api/camera/exposure_mode', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({auto: auto})
+    }).then(r => r.json()).then(data => {
+        console.log('Exposure mode set:', data);
+        document.getElementById('status').textContent = `Exposure mode: ${auto ? 'Auto' : 'Manual'}`;
+        updateCameraControlsUI();
+    }).catch(err => {
+        console.error('Error setting exposure mode:', err);
+        document.getElementById('status').textContent = 'Error setting exposure mode';
+    });
+};
+
+const setManualExposure = () => {
+    const exposure = parseInt(document.getElementById('manual-exposure').value, 10);
+    const gain = parseFloat(document.getElementById('manual-gain').value);
+    
+    if (isNaN(exposure) || isNaN(gain)) {
+        document.getElementById('status').textContent = 'Invalid exposure or gain values';
+        return;
+    }
+    
+    api('/api/camera/exposure', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({exposure_us: exposure, analogue_gain: gain})
+    }).then(r => r.json()).then(data => {
+        console.log('Manual exposure set:', data);
+        document.getElementById('status').textContent = `Manual exposure: ${data.exposure_us}µs, gain: ${data.analogue_gain}`;
+    }).catch(err => {
+        console.error('Error setting manual exposure:', err);
+        document.getElementById('status').textContent = 'Error setting manual exposure';
+    });
+};
+
+const setResolution = () => {
+    const resSelect = document.getElementById('resolution-select');
+    const [width, height] = resSelect.value.split('x').map(v => parseInt(v, 10));
+    
+    api('/api/camera/resolution', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({width: width, height: height})
+    }).then(r => r.json()).then(data => {
+        console.log('Resolution set:', data);
+        document.getElementById('status').textContent = `Resolution: ${data.width}x${data.height}`;
+        // Restart stream to apply new resolution
+        setTimeout(() => {
+            const stream = document.getElementById('stream');
+            const currentSrc = stream.src;
+            stream.src = '';
+            setTimeout(() => {
+                stream.src = currentSrc;
+            }, 100);
+        }, 500);
+    }).catch(err => {
+        console.error('Error setting resolution:', err);
+        document.getElementById('status').textContent = 'Error setting resolution';
+    });
+};
+
+const setAWBMode = (auto) => {
+    api('/api/camera/awb_mode', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({auto: auto})
+    }).then(r => r.json()).then(data => {
+        console.log('AWB mode set:', data);
+        document.getElementById('status').textContent = `White balance: ${auto ? 'Auto' : 'Manual'}`;
+        updateCameraControlsUI();
+    }).catch(err => {
+        console.error('Error setting AWB mode:', err);
+        document.getElementById('status').textContent = 'Error setting AWB mode';
+    });
+};
+
+const setAWBGains = () => {
+    const red = parseFloat(document.getElementById('awb-red').value);
+    const blue = parseFloat(document.getElementById('awb-blue').value);
+    
+    if (isNaN(red) || isNaN(blue)) {
+        document.getElementById('status').textContent = 'Invalid white balance gain values';
+        return;
+    }
+    
+    api('/api/camera/awb_gains', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({red: red, blue: blue})
+    }).then(r => r.json()).then(data => {
+        console.log('AWB gains set:', data);
+        document.getElementById('status').textContent = `WB gains - Red: ${data.red}, Blue: ${data.blue}`;
+    }).catch(err => {
+        console.error('Error setting AWB gains:', err);
+        document.getElementById('status').textContent = 'Error setting AWB gains';
+    });
+};
+
+const setColorMode = () => {
+    const mode = document.getElementById('color-mode-select').value;
+    
+    api('/api/camera/color', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({mode: mode})
+    }).then(r => r.json()).then(data => {
+        console.log('Color mode set:', data);
+        document.getElementById('status').textContent = `Color mode: ${data.color_mode}`;
+    }).catch(err => {
+        console.error('Error setting color mode:', err);
+        document.getElementById('status').textContent = 'Error setting color mode';
+    });
+};
+
+const loadCameraStatus = () => {
+    api('/api/camera/status')
+        .then(r => r.json())
+        .then(data => {
+            console.log('Camera status:', data);
+            updateUIFromStatus(data);
+        })
+        .catch(err => {
+            console.error('Error loading camera status:', err);
+        });
+};
+
+const updateUIFromStatus = (status) => {
+    // Update exposure controls
+    if (document.getElementById('exposure-auto')) {
+        document.getElementById('exposure-auto').checked = status.exposure_auto;
+    }
+    if (document.getElementById('manual-exposure')) {
+        document.getElementById('manual-exposure').value = status.exposure_us;
+    }
+    if (document.getElementById('manual-gain')) {
+        document.getElementById('manual-gain').value = status.analogue_gain;
+    }
+    
+    // Update AWB controls
+    if (document.getElementById('awb-auto')) {
+        document.getElementById('awb-auto').checked = status.awb_auto;
+    }
+    if (document.getElementById('awb-red')) {
+        document.getElementById('awb-red').value = status.awb_gains.red;
+    }
+    if (document.getElementById('awb-blue')) {
+        document.getElementById('awb-blue').value = status.awb_gains.blue;
+    }
+    
+    // Update resolution
+    if (document.getElementById('resolution-select')) {
+        const resValue = `${status.resolution.width}x${status.resolution.height}`;
+        document.getElementById('resolution-select').value = resValue;
+    }
+    
+    // Update color mode
+    if (document.getElementById('color-mode-select')) {
+        document.getElementById('color-mode-select').value = status.color_mode;
+    }
+    
+    updateCameraControlsUI();
+};
+
+const updateCameraControlsUI = () => {
+    // Enable/disable manual controls based on auto modes
+    const exposureAuto = document.getElementById('exposure-auto')?.checked ?? true;
+    const awbAuto = document.getElementById('awb-auto')?.checked ?? true;
+    
+    // Exposure controls
+    if (document.getElementById('manual-exposure')) {
+        document.getElementById('manual-exposure').disabled = exposureAuto;
+    }
+    if (document.getElementById('manual-gain')) {
+        document.getElementById('manual-gain').disabled = exposureAuto;
+    }
+    if (document.getElementById('set-manual-exposure')) {
+        document.getElementById('set-manual-exposure').disabled = exposureAuto;
+    }
+    
+    // AWB controls
+    if (document.getElementById('awb-red')) {
+        document.getElementById('awb-red').disabled = awbAuto;
+    }
+    if (document.getElementById('awb-blue')) {
+        document.getElementById('awb-blue').disabled = awbAuto;
+    }
+    if (document.getElementById('set-awb-gains')) {
+        document.getElementById('set-awb-gains').disabled = awbAuto;
+    }
 };
 
 // WiFi Management Functions

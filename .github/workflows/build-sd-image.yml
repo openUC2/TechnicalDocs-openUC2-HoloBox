@@ -73,8 +73,13 @@ jobs:
         apt-get install -y rfkill iproute2 nftables python3-prctl # libcap2-dev libcamera0 libcamera-apps
         
         # --- User / auto-login / SSH (Bookworm boot path is /boot/firmware) ---
-        if ! id pi >/dev/null 2>&1; then useradd -m -s /bin/bash -G sudo pi; fi
+        if ! id pi >/dev/null 2>&1; then useradd -m -s /bin/bash -G sudo,video,gpio,i2c,spi,dialout pi; fi
         echo "pi:youseetoo" | chpasswd
+        
+        # Add capability to bind to privileged ports for pi user
+        # This allows the camera API to bind to ports 80/443 without sudo
+        apt-get install -y libcap2-bin
+        setcap 'cap_net_bind_service=+ep' /usr/bin/python3.11 || echo "Warning: Could not set capability for Python"
         mkdir -p /etc/systemd/system/getty@tty1.service.d
         cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf << 'AUTOLOGIN'
         [Service]
@@ -104,6 +109,10 @@ jobs:
         pip install picamera2 --force-reinstall --break-system-packages
         pip install numpy==1.26.4 --break-system-packages
 
+        # Set capability for Python to bind to privileged ports (after pip installs)
+        which python3.11 && setcap 'cap_net_bind_service=+ep' $(which python3.11) || echo "Warning: Could not set capability for python3.11"
+        which python3 && setcap 'cap_net_bind_service=+ep' $(which python3) || echo "Warning: Could not set capability for python3"
+
 
         mkdir -p /var/log/holobox
         chown pi:pi /var/log/holobox
@@ -115,7 +124,7 @@ jobs:
         Type=simple
         User=pi
         WorkingDirectory=/opt/holobox
-        ExecStart=python /opt/holobox/streamlined_camera_api.py --host 0.0.0.0 --port 8001
+        ExecStart=/usr/bin/python3 /opt/holobox/streamlined_camera_api.py --host 0.0.0.0 --port 80 --no-ssl
         Restart=on-failure
         RestartSec=5
         StandardOutput=append:/var/log/holobox/camera.log
