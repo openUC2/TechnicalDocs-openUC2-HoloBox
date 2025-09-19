@@ -24,8 +24,11 @@ import sys
 try:
     from picamera2 import Picamera2
     CAMERA_AVAILABLE = True
-except ImportError:
-    print("Warning: picamera2 not available, using mock camera")
+    picam = Picamera2()
+    picam.configure(picam.create_video_configuration(main={"size": (640, 480)}))
+    picam.start()    
+except Exception as e:
+    print(f"Warning: picamera2 not available, using mock camera. Error: {e}")
     CAMERA_AVAILABLE = False
     
     class MockPicamera2:
@@ -61,7 +64,7 @@ except ImportError:
         def release(self):
             pass
     
-    Picamera2 = MockPicamera2
+    picam = MockPicamera2()
 
 app = FastAPI(title="Streamlined Camera API", description="Camera streaming and processing API")
 
@@ -74,13 +77,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize camera
-if CAMERA_AVAILABLE:
-    picam = Picamera2()
-    picam.configure(picam.create_video_configuration(main={"size": (640, 480)}))
-    picam.start()
-else:
-    picam = MockPicamera2()
+
 
 # Camera state tracking
 camera_state = {

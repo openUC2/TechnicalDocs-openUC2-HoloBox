@@ -114,12 +114,12 @@ jobs:
         [Service]
         Type=simple
         User=pi
-        Group=pi
-        WorkingDirectory=/home/pi/Software
-        Environment=PATH=/home/pi/.local/bin:/usr/local/bin:/usr/bin:/bin
-        ExecStart=/usr/bin/python3 streamlined_camera_api.py --host 0.0.0.0 --port 80 --no-ssl
-        Restart=always
+        WorkingDirectory=/opt/holobox
+        ExecStart=python /opt/holobox/streamlined_camera_api.py --host 0.0.0.0 --port 8001
+        Restart=on-failure
         RestartSec=5
+        StandardOutput=append:/var/log/holobox/camera.log
+        StandardError=append:/var/log/holobox/camera.log
         [Install]
         WantedBy=multi-user.target
         UNIT
