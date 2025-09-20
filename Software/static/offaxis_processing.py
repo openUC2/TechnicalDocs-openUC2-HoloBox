@@ -4,7 +4,19 @@ from pyodide.ffi import to_js, create_proxy
 import asyncio
 
 # Global variables for off-axis processing
+# Global variables for off-axis processing
 processing_enabled = False
+processing_interval = None
+timer_proxy = None
+current_wavelength = 532e-9  # nm to m (default green)
+current_pixelsize = 1.4e-6   # µm to m  
+current_refocus_distance = 0.0  # µm (digital refocusing)
+debug_mode = True
+current_roi = {'x': 100, 'y': 100, 'width': 100, 'height': 100}
+
+console.log("🔧 Starting PyScript off-axis hologram processing setup...")
+
+def process_offaxis_hologram(hologram, roi_coords, wavelength, pixel_size, refocus_distance): False
 processing_interval = None
 timer_proxy = None
 current_wavelength = 532e-9  # nm to m (default green)
@@ -85,7 +97,7 @@ def process_offaxis_hologram(hologram, roi_coords, wavelength, pixel_size, refoc
             console.log(f"Phase range: {phase.min():.3f} - {phase.max():.3f}")
         
         return {
-            'fourier_magnitude': fourier_magnitude,
+            'fourier_magnitude': np.log(1+fourier_magnitude/np.max(fourier_magnitude))*255.,  # Log scale for better visualization
             'amplitude': amplitude,
             'phase': phase
         }
@@ -221,9 +233,16 @@ def display_image_on_canvas(image_array, canvas_id, colormap='gray'):
 def get_camera_image():
     """Get current camera image for processing"""
     try:
-        # Try to get the stream image
-        stream_img = document.getElementById('camera-stream')
-        if stream_img and stream_img.complete and stream_img.naturalWidth > 0:
+        # Try to get the stream image (use 'stream' ID for consistency)
+        stream_img = document.getElementById("stream")
+        
+        if debug_mode:
+            if stream_img:
+                console.log(f"Debug: Stream element found - complete: {stream_img.complete}, naturalWidth: {stream_img.naturalWidth}, src: {stream_img.src}")
+            else:
+                console.log("Debug: Stream element with ID 'stream' not found")
+        
+        if stream_img and stream_img.complete and stream_img.naturalWidth > 0 and stream_img.src and not stream_img.src.startswith('data:,'):
             # Create a canvas to extract image data
             temp_canvas = document.createElement('canvas')
             temp_ctx = temp_canvas.getContext('2d')
@@ -237,8 +256,9 @@ def get_camera_image():
             image_data = temp_ctx.getImageData(0, 0, temp_canvas.width, temp_canvas.height)
             width, height = temp_canvas.width, temp_canvas.height
             
-            # Convert to numpy array (extract green channel for holography)
-            rgba_array = np.frombuffer(image_data.data, dtype=np.uint8)
+            # Convert JavaScript ImageData to numpy array
+            # Use numpy.array() directly on the JS array
+            rgba_array = np.array(image_data.data.to_py(), dtype=np.uint8)
             rgba_array = rgba_array.reshape((height, width, 4))
             
             # Use green channel for hologram processing
@@ -246,6 +266,8 @@ def get_camera_image():
             
             if debug_mode:
                 console.log(f"✅ Got camera image: {width}x{height}")
+                console.log(f"Image data shape: {rgba_array.shape}")
+                console.log(f"Hologram range: {hologram.min():.1f} - {hologram.max():.1f}")
                 
             return hologram
             

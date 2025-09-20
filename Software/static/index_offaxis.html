@@ -301,7 +301,7 @@
     <div class="panel-item">
       <h6>Live Camera Feed</h6>
       <div class="canvas-container">
-        <img id="camera-stream" alt="Camera stream" 
+        <img id="stream" alt="Camera stream" 
              style="max-width: 100%; height: auto; display: block; margin: 0 auto;"
              onload="this.style.display='block'" 
              onerror="this.style.display='none'; console.error('Camera stream failed to load');">
@@ -341,6 +341,7 @@
         <div class="col-auto">
           <button id="startBtn" class="btn btn-success">Start Stream</button>
           <button id="stopBtn" class="btn btn-danger">Stop Stream</button>
+          <span id="status" class="text-muted ms-2"></span>
         </div>
         <div class="col-auto">
           <button id="captureBtn" class="btn btn-warning">Capture JPEG</button>
@@ -459,6 +460,30 @@
 
 <!-- External JavaScript file -->
 <script src="./camera_controls.js"></script>
+
+<!-- Off-axis specific initialization -->
+<script>
+// Override the camera_controls.js initialization to only bind existing elements
+document.addEventListener('DOMContentLoaded', function() {
+    // Only bind event handlers for elements that exist in off-axis interface
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const captureBtn = document.getElementById('captureBtn');
+    
+    if (startBtn) startBtn.onclick = startStream;
+    if (stopBtn) stopBtn.onclick = stopStream;
+    if (captureBtn) captureBtn.onclick = capture;
+    
+    // Initialize the host input
+    const hostInput = document.getElementById('host');
+    if (hostInput) {
+        hostInput.value = window.location.origin;
+        hostInput.onchange = () => {
+            baseUrl = hostInput.value;
+        };
+    }
+});
+</script>
 
 <!-- Panel toggle functionality -->
 <script>
