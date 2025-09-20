@@ -386,6 +386,29 @@
       object-fit: contain;
       border: 1px solid var(--dark-border);
     }
+    
+    /* Navigation Tabs */
+    .nav-tabs {
+      border-bottom-color: var(--dark-border) !important;
+    }
+    
+    .nav-tabs .nav-link {
+      color: var(--dark-text-muted) !important;
+      background-color: transparent !important;
+      border-color: transparent !important;
+    }
+    
+    .nav-tabs .nav-link:hover {
+      color: var(--dark-text) !important;
+      background-color: var(--dark-surface-hover) !important;
+      border-color: var(--dark-border) !important;
+    }
+    
+    .nav-tabs .nav-link.active {
+      color: var(--dark-text) !important;
+      background-color: var(--dark-surface) !important;
+      border-color: var(--dark-border) var(--dark-border) var(--dark-surface) !important;
+    }
   </style>
 </head>
 <body class="bg-dark text-light">
@@ -402,6 +425,16 @@
 </nav>
 
 <div class="container-fluid py-4">
+  
+  <!-- Navigation Tabs -->
+  <ul class="nav nav-tabs mb-4">
+    <li class="nav-item">
+      <a class="nav-link active" href="index.html">Inline Holography</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link" href="index_offaxis.html">Off-Axis Holography</a>
+    </li>
+  </ul>
   
   <!-- Camera Stream and Processed Output -->
   <div class="video-container">
