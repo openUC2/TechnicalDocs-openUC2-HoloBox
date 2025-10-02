@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Set up event listeners once DOM is loaded
     document.getElementById('startBtn').onclick = startStream;
     document.getElementById('stopBtn').onclick = stopStream;
+    document.getElementById('snapBtn').onclick = snapHighRes;
     document.getElementById('setExposure').onclick = setExposure;
     document.getElementById('setGain').onclick = setGain;
     document.getElementById('captureBtn').onclick = capture;
@@ -49,11 +50,23 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('host').onchange = updateBaseUrl;
     document.getElementById('host').oninput = updateBaseUrl;
     
+    // *** PANEL TOGGLE FUNCTIONALITY FOR IPAD/SAFARI ***
+    // Initialize panel toggle functionality with proper delay and fallback
+    // Wait for all other elements to be initialized first
+    setTimeout(() => {
+        initializePanelToggles();
+    }, 250); // Increased delay to ensure everything else is ready
+    
+    // Auto-detect URL from browser location (initial suggestion only)
+    initializeAutoDetectedUrl();
+    document.getElementById('host').oninput = updateBaseUrl;
+    
     // Auto-detect URL from browser location (initial suggestion only)
     initializeAutoDetectedUrl();
     
     // Initialize
-    document.getElementById('status').textContent = 'Ready - Click Start Stream to begin';
+    document.getElementById('status').textContent = 'Ready - Click Start Stream to begin or Snap High-Res for static capture';
+    updateModeIndicator('Ready');
     refreshWifiStatus(); // Load initial WiFi status
     loadCameraStatus(); // Load initial camera status
     
@@ -122,6 +135,20 @@ const api = (path, opt = {}) => {
 };
 
 const startStream = () => {
+    // If we're in snap mode, exit it first
+    if (isInSnapMode) {
+        const streamImg = document.getElementById('stream');
+        if (streamImg.src && streamImg.src.startsWith('blob:')) {
+            URL.revokeObjectURL(streamImg.src);
+        }
+        isInSnapMode = false;
+        
+        // Reset snap button UI
+        const snapBtn = document.getElementById('snapBtn');
+        snapBtn.textContent = '📸 Snap High-Res';
+        snapBtn.className = 'btn btn-warning';
+    }
+    
     const stream = document.getElementById('stream');
     // Use the more compatible MJPEG stream endpoint
     stream.src = baseUrl + '/api/stream.mjpg';
@@ -136,12 +163,14 @@ const startStream = () => {
             updateBoundaryBox();
         }
         document.getElementById('status').textContent = 'Stream started';
+        updateModeIndicator('Live Streaming');
         console.log('Stream loaded successfully');
     };
     
     // Handle error for better debugging
     stream.onerror = () => {
         document.getElementById('status').textContent = 'Stream failed to load - check connection';
+        updateModeIndicator('Stream Error');
         console.error('Stream failed to load from:', stream.src);
         
         // On mobile devices, suggest manual refresh
@@ -156,6 +185,7 @@ const startStream = () => {
     stream.onabort = () => {
         console.log('Stream loading aborted');
         document.getElementById('status').textContent = 'Stream loading interrupted';
+        updateModeIndicator('Stream Interrupted');
     };
     
     // Add click handler for mobile devices to retry loading
@@ -178,8 +208,113 @@ const startStream = () => {
 };
 
 const stopStream = () => {
-    document.getElementById('stream').removeAttribute('src');
+    const streamImg = document.getElementById('stream');
+    
+    // If we're in snap mode, clean up the blob URL
+    if (isInSnapMode && streamImg.src && streamImg.src.startsWith('blob:')) {
+        URL.revokeObjectURL(streamImg.src);
+        isInSnapMode = false;
+        
+        // Reset snap button UI
+        const snapBtn = document.getElementById('snapBtn');
+        snapBtn.textContent = '📸 Snap High-Res';
+        snapBtn.className = 'btn btn-warning';
+        
+        // Re-enable start button
+        document.getElementById('startBtn').disabled = false;
+    }
+    
+    streamImg.removeAttribute('src');
     document.getElementById('status').textContent = 'Stream stopped';
+    updateModeIndicator('Stream Stopped');
+};
+
+// Global variable to track if we're in snap mode
+let isInSnapMode = false;
+let wasStreaming = false;
+
+// Helper function to update mode indicator
+const updateModeIndicator = (mode) => {
+    const modeElement = document.getElementById('current-mode');
+    if (modeElement) {
+        modeElement.textContent = mode;
+        modeElement.style.color = mode.includes('High-Res') ? '#ffc107' : 
+                                  mode.includes('Streaming') ? '#28a745' : '#6c757d';
+    }
+};
+
+const snapHighRes = () => {
+    const streamImg = document.getElementById('stream');
+    const snapBtn = document.getElementById('snapBtn');
+    const startBtn = document.getElementById('startBtn');
+    
+    if (!isInSnapMode) {
+        // Stop stream and capture high-res image
+        wasStreaming = !!streamImg.src && !streamImg.src.includes('data:');
+        
+        // Stop the stream
+        streamImg.removeAttribute('src');
+        
+        // Update UI
+        snapBtn.textContent = '🔄 Resume Stream';
+        snapBtn.className = 'btn btn-success';
+        startBtn.disabled = true;
+        updateModeIndicator('High-Res Snap Mode');
+        
+        // Capture high-res image
+        document.getElementById('status').textContent = 'Capturing high-resolution image...';
+        
+        api('/snapshot/highres')
+            .then(r => r.blob())
+            .then(blob => {
+                const imageUrl = URL.createObjectURL(blob);
+                streamImg.src = imageUrl;
+                streamImg.onload = () => {
+                    updateStreamAspectRatio();
+                    if (!document.getElementById('boundary-box').classList.contains('hidden')) {
+                        updateBoundaryBox();
+                    }
+                    document.getElementById('status').textContent = 'High-resolution image captured - processing from static image';
+                    isInSnapMode = true;
+                    
+                    // Make sure PyScript processes the static image
+                    if (window.processStaticImage) {
+                        window.processStaticImage();
+                    }
+                };
+            })
+            .catch(err => {
+                console.error('Error capturing high-res image:', err);
+                document.getElementById('status').textContent = 'Error capturing high-res image';
+                // Reset UI on error
+                snapBtn.textContent = '📸 Snap High-Res';
+                snapBtn.className = 'btn btn-warning';
+                startBtn.disabled = false;
+                updateModeIndicator('Stream Ready');
+            });
+    } else {
+        // Resume streaming mode
+        isInSnapMode = false;
+        
+        // Clean up the blob URL
+        if (streamImg.src && streamImg.src.startsWith('blob:')) {
+            URL.revokeObjectURL(streamImg.src);
+        }
+        
+        // Reset UI
+        snapBtn.textContent = '📸 Snap High-Res';
+        snapBtn.className = 'btn btn-warning';
+        startBtn.disabled = false;
+        updateModeIndicator('Stream Ready');
+        
+        // Resume stream if it was running before
+        if (wasStreaming) {
+            startStream();
+        } else {
+            streamImg.removeAttribute('src');
+            document.getElementById('status').textContent = 'Ready - Click Start Stream to begin or Snap High-Res for static capture';
+        }
+    }
 };
 
 const setExposure = () => {
@@ -859,4 +994,131 @@ const initializeProcessedCanvas = () => {
     processedCanvas.height = size;
     
     console.log(`Initialized processed canvas to ${size}x${size}`);
+};
+
+// *** PANEL TOGGLE FUNCTIONALITY FOR IPAD/SAFARI ***
+const initializePanelToggles = () => {
+    console.log('🎯 Initializing ROBUST panel toggle for both Chrome and Safari/iPad...');
+    
+    // Check if togglePanel function is available
+    if (typeof window.togglePanel !== 'function') {
+        console.error('❌ togglePanel function not found! Retrying in 300ms...');
+        setTimeout(initializePanelToggles, 300);
+        return;
+    }
+    
+    // Get all panel headers by ID to be specific
+    const panelIds = [
+        'camera-controls-header',
+        'hologram-processing-header',
+        'wifi-management-header'
+    ];
+    
+    console.log(`🔍 Looking for ${panelIds.length} panel headers...`);
+    
+    let successCount = 0;
+    
+    panelIds.forEach(headerId => {
+        const header = document.getElementById(headerId);
+        if (header) {
+            console.log(`🔧 Setting up panel: ${headerId}`);
+            
+            // Check if header already has event listeners (avoid double-binding)
+            if (header.dataset.panelInitialized === 'true') {
+                console.log(`⚠️ Panel ${headerId} already initialized, skipping...`);
+                return;
+            }
+            
+            // Create a unified event handler that works for both mouse and touch
+            const handlePanelToggle = function(event) {
+                // Prevent default behavior
+                if (event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+                
+                console.log(`🎯 Panel toggle triggered: ${headerId} (${event ? event.type : 'direct'})`);
+                
+                try {
+                    window.togglePanel(header);
+                    console.log(`✅ Successfully toggled: ${headerId}`);
+                } catch (error) {
+                    console.error(`❌ Error toggling ${headerId}:`, error);
+                }
+            };
+            
+            // Method 1: onclick (works well on most browsers)
+            header.onclick = handlePanelToggle;
+            
+            // Method 2: addEventListener for redundancy (better for some mobile browsers)
+            header.addEventListener('click', handlePanelToggle, { 
+                passive: false, 
+                capture: true 
+            });
+            
+            // Method 3: Touch events specifically for mobile/iPad
+            let touchStartTime = 0;
+            
+            header.addEventListener('touchstart', function(e) {
+                touchStartTime = Date.now();
+                this.classList.add('touching');
+                console.log(`👆 Touch start: ${headerId}`);
+            }, { passive: true });
+            
+            header.addEventListener('touchend', function(e) {
+                const touchDuration = Date.now() - touchStartTime;
+                this.classList.remove('touching');
+                
+                // Only trigger if it's a quick tap (not a long press)
+                if (touchDuration < 500) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log(`👆 Touch end (quick tap): ${headerId}`);
+                    handlePanelToggle(e);
+                }
+            }, { passive: false });
+            
+            header.addEventListener('touchcancel', function() {
+                this.classList.remove('touching');
+                console.log(`❌ Touch cancelled: ${headerId}`);
+            }, { passive: true });
+            
+            // Prevent context menu
+            header.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+                return false;
+            }, { passive: false });
+            
+            // Ensure proper styling for interaction
+            header.style.cursor = 'pointer';
+            header.style.webkitUserSelect = 'none';
+            header.style.userSelect = 'none';
+            header.style.webkitTouchCallout = 'none';
+            
+            // Mark as initialized to prevent double-binding
+            header.dataset.panelInitialized = 'true';
+            
+            successCount++;
+            console.log(`✅ Panel setup complete: ${headerId}`);
+        } else {
+            console.warn(`❌ Panel header not found: ${headerId}`);
+        }
+    });
+    
+    console.log(`🎯 Panel toggle setup: ${successCount}/${panelIds.length} panels initialized`);
+    
+    // Device detection for debugging
+    const userAgent = navigator.userAgent;
+    if (userAgent.includes('iPad') || userAgent.includes('iPhone')) {
+        console.log('📱 iOS device detected');
+    } else if (userAgent.includes('Safari') && !userAgent.includes('Chrome')) {
+        console.log('🦁 Safari detected');
+    } else if (userAgent.includes('Chrome')) {
+        console.log('� Chrome detected');
+    } else {
+        console.log('🌐 Other browser detected');
+    }
+    
+    // Test functionality
+    console.log('🧪 Panel toggle functionality ready! Try clicking any panel header.');
 };

@@ -12,7 +12,12 @@
   
   <!-- Use local PyScript files for offline operation -->
   <script type="module" src="./js/pyscript/core.js"></script>
-  <link rel="stylesheet" href="./js/pyscript/core.css">
+  <link rel="styles  <!-- Hologram Processing Parameters -->
+  <div class="controls-panel">
+    <div id="hologram-processing-header" class="panel-header collapsed">
+      <h4>Hologram Processing Parameters</h4>
+      <span class="panel-toggle">▼</span>
+    </div>href="./js/pyscript/core.css">
   
   <style>
     /* Dark Theme Variables */
@@ -74,15 +79,39 @@
       border-bottom: 1px solid var(--dark-border);
       cursor: pointer;
       user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
       display: flex;
-      justify-content: between;
+      justify-content: space-between;
       align-items: center;
       transition: background-color 0.3s ease;
+      /* Better touch targets for mobile */
+      min-height: 44px;
+      /* Prevent text selection on touch */
+      -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+      /* Force hardware acceleration for smoother animations */
+      transform: translateZ(0);
     }
     
     .panel-header:hover {
       background: var(--dark-accent);
       color: white;
+    }
+    
+    /* Better touch feedback for mobile devices */
+    .panel-header:active,
+    .panel-header.touching {
+      background: var(--dark-accent) !important;
+      color: white !important;
+      transform: translateY(1px);
+    }
+    
+    /* iOS Safari specific touch improvements */
+    @media (hover: none) and (pointer: coarse) {
+      .panel-header {
+        -webkit-tap-highlight-color: var(--dark-accent);
+        tap-highlight-color: var(--dark-accent);
+      }
     }
     
     .panel-header h4 {
@@ -175,6 +204,17 @@
     .btn-danger {
       background-color: var(--dark-danger) !important;
       border-color: var(--dark-danger) !important;
+    }
+    
+    /* Snap button specific styling */
+    #snapBtn {
+      font-weight: 600;
+      transition: all 0.3s ease;
+    }
+    
+    #snapBtn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
     }
     
     /* Cards and Panels */
@@ -462,7 +502,7 @@
 
   <!-- Camera Controls -->
   <div class="controls-panel">
-    <div class="panel-header collapsed" onclick="togglePanel(this)">
+    <div id="camera-controls-header" class="panel-header collapsed">
       <h4>Camera Controls</h4>
       <span class="panel-toggle">▼</span>
     </div>
@@ -471,9 +511,10 @@
         <div class="col-auto">
           <button id="startBtn" class="btn btn-success">Start Stream</button>
           <button id="stopBtn" class="btn btn-danger">Stop Stream</button>
+          <button id="snapBtn" class="btn btn-warning">📸 Snap High-Res</button>
         </div>
         <div class="col-auto">
-          <button id="captureBtn" class="btn btn-warning">Capture JPEG</button>
+          <button id="captureBtn" class="btn btn-info">Capture JPEG</button>
           <a id="downloadLink" class="btn btn-outline-secondary d-none" download="capture.jpg">Download</a>
         </div>
         <div class="col-auto">
@@ -698,7 +739,7 @@
 
   <!-- WiFi Management -->
   <div class="controls-panel">
-    <div class="panel-header collapsed" onclick="togglePanel(this)">
+    <div id="wifi-management-header" class="panel-header collapsed">
       <h4>WiFi Management</h4>
       <span class="panel-toggle">▼</span>
     </div>
@@ -761,6 +802,7 @@
   <!-- Status Information -->
   <div class="processing-status">
     <strong>Status:</strong> <span id="status">Ready</span><br>
+    <strong>Mode:</strong> <span id="current-mode">Stream Ready</span><br>
     <strong>Processing:</strong> <span id="processing-enabled">Disabled</span><br>
     <strong>Debug Mode:</strong> <span id="debug-status">Enabled</span><br>
     <strong>Last Frame:</strong> <span id="last-processed">None</span>
@@ -774,15 +816,11 @@
   packages = ["numpy", "matplotlib"]
 </py-config>
 
-<!-- Simplified PyScript setup with direct hologram processing -->
-<py-script src="./hologram_processing.py"></py-script>
-
-<!-- External JavaScript file -->
-<script src="./camera_controls.js"></script>
-
-<!-- Panel toggle functionality -->
+<!-- Panel toggle functionality - Load BEFORE camera_controls.js -->
 <script>
-function togglePanel(header) {
+// Touch-friendly panel toggle function - defined globally
+window.togglePanel = function(header) {
+  console.log('🔄 togglePanel called for:', header.id);
   const content = header.nextElementSibling;
   const toggle = header.querySelector('.panel-toggle');
   
@@ -790,30 +828,23 @@ function togglePanel(header) {
     content.classList.remove('show');
     header.classList.add('collapsed');
     toggle.style.transform = 'rotate(-90deg)';
+    console.log('📤 Panel closed:', header.id);
   } else {
     content.classList.add('show');
     header.classList.remove('collapsed');
     toggle.style.transform = 'rotate(0deg)';
+    console.log('📥 Panel opened:', header.id);
   }
-}
+};
 
-// Helper function for slider adjustment (if needed)
-function adjustSlider(sliderId, increment) {
-  const slider = document.getElementById(sliderId);
-  if (slider) {
-    const currentValue = parseFloat(slider.value);
-    const newValue = currentValue + increment;
-    const min = parseFloat(slider.min);
-    const max = parseFloat(slider.max);
-    
-    if (newValue >= min && newValue <= max) {
-      slider.value = newValue;
-      // Trigger the input event to update the display
-      slider.dispatchEvent(new Event('input'));
-    }
-  }
-}
+console.log('✅ togglePanel function loaded globally');
 </script>
+
+<!-- External JavaScript file -->
+<script src="./camera_controls.js"></script>
+
+<!-- Simplified PyScript setup with direct hologram processing -->
+<py-script src="./hologram_processing.py"></py-script>
   
 
 </body>
