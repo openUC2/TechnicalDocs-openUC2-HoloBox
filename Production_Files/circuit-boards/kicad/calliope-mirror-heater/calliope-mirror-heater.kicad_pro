@@ -99,10 +99,6 @@
         [
           "shorting_items|128299566|98999998|4bd923f4-bcb3-4d8d-b741-71e6d1310029|4cc4c7a9-0825-43e4-9dea-9042f4ef1af5",
           "intended"
-        ],
-        [
-          "shorting_items|128299572|99399998|4cc4c7a9-0825-43e4-9dea-9042f4ef1af5|c5a5e5bd-9b26-4460-b796-82ac7ac7c721",
-          "intended"
         ]
       ],
       "meta": {
@@ -297,7 +293,73 @@
       "mpn": ""
     },
     "layer_pairs": [],
-    "layer_presets": [],
+    "layer_presets": [
+      {
+        "activeLayer": -2,
+        "flipBoard": false,
+        "layers": [
+          3,
+          7,
+          25
+        ],
+        "name": "silk_B",
+        "renderLayers": [
+          "vias",
+          "footprint_text",
+          "footprint_anchors",
+          "ratsnest",
+          "grid",
+          "footprints_front",
+          "footprints_back",
+          "footprint_values",
+          "footprint_references",
+          "tracks",
+          "drc_errors",
+          "drawing_sheet",
+          "bitmaps",
+          "pads",
+          "zones",
+          "drc_warnings",
+          "drc_exclusions",
+          "locked_item_shadows",
+          "conflict_shadows",
+          "shapes"
+        ]
+      },
+      {
+        "activeLayer": -2,
+        "flipBoard": false,
+        "layers": [
+          1,
+          5,
+          25,
+          31
+        ],
+        "name": "silk_F",
+        "renderLayers": [
+          "vias",
+          "footprint_text",
+          "footprint_anchors",
+          "ratsnest",
+          "grid",
+          "footprints_front",
+          "footprints_back",
+          "footprint_values",
+          "footprint_references",
+          "tracks",
+          "drc_errors",
+          "drawing_sheet",
+          "bitmaps",
+          "pads",
+          "zones",
+          "drc_warnings",
+          "drc_exclusions",
+          "locked_item_shadows",
+          "conflict_shadows",
+          "shapes"
+        ]
+      }
+    ],
     "viewports": []
   },
   "boards": [],
@@ -569,7 +631,7 @@
       "plot": "temp/",
       "pos_files": "",
       "specctra_dsn": "",
-      "step": "",
+      "step": "OUTPUTS/calliope-mirror-heater.step",
       "svg": "",
       "vrml": ""
     },
@@ -701,7 +763,7 @@
     },
     "net_format_name": "",
     "page_layout_descr_file": "",
-    "plot_directory": "",
+    "plot_directory": "OUTPUTS/for-humans/",
     "space_save_all_events": true,
     "spice_current_sheet_as_root": false,
     "spice_external_command": "spice \"%I\"",

@@ -63,11 +63,11 @@ pip install -r requirements.txt --break-system-packages
 5. **Open browser** to `http://192.168.4.1:8000/static/`
 
 **Features included in SD card image:**
-- ✅ All software pre-installed and configured
-- ✅ Works completely offline (no internet required)
-- ✅ Automatic startup on boot
-- ✅ Access Point mode ready to use
-- ✅ Default credentials: SSH user `pi`, password `holobox123`
+- All software pre-installed and configured
+- Works completely offline (no internet required)
+- Automatic startup on boot
+- Access Point mode ready to use
+- Default credentials: SSH user `pi`, password `youseetoo`
 
 ### Option 2: Manual Installation
 ```bash

@@ -6,7 +6,7 @@
 	(descr "Sub-miniature slide switch, vertical, SMT J bend https://dznh3ojzb2azq.cloudfront.net/products/Slide/JS/documents/datasheet.pdf")
 	(tags "switch DPDT SMT")
 	(property "Reference" "REF**"
-		(at 0 -3.05 0)
+		(at 0 -4.4 0)
 		(layer "F.SilkS")
 		(uuid "4a28f549-b81f-41c2-9b59-d86a9dd0fa45")
 		(effects
@@ -55,8 +55,8 @@
 	)
 	(attr smd)
 	(fp_line
-		(start -4.61 -1.91)
-		(end -4.61 1.91)
+		(start -4.61 -3.5)
+		(end -4.61 3.5)
 		(stroke
 			(width 0.12)
 			(type solid)
@@ -65,8 +65,8 @@
 		(uuid "59540737-f478-4e31-b8c9-d4062cf93c9d")
 	)
 	(fp_line
-		(start -4.61 1.91)
-		(end -3.26 1.91)
+		(start -4.61 3.5)
+		(end -3.26 3.5)
 		(stroke
 			(width 0.12)
 			(type solid)
@@ -75,8 +75,8 @@
 		(uuid "a8767654-48a5-4946-aa01-d5344949dd75")
 	)
 	(fp_line
-		(start -3.26 -1.91)
-		(end -4.61 -1.91)
+		(start -3.26 -3.5)
+		(end -4.61 -3.5)
 		(stroke
 			(width 0.12)
 			(type solid)
@@ -85,8 +85,8 @@
 		(uuid "04903d10-1607-41f9-9323-ad18760c4fb8")
 	)
 	(fp_line
-		(start -0.76 -1.91)
-		(end -1.74 -1.91)
+		(start -0.76 -3.5)
+		(end -1.74 -3.5)
 		(stroke
 			(width 0.12)
 			(type solid)
@@ -95,8 +95,8 @@
 		(uuid "87755e83-66ef-479e-9231-ac7668415971")
 	)
 	(fp_line
-		(start -0.76 1.91)
-		(end -1.74 1.91)
+		(start -0.76 3.5)
+		(end -1.74 3.5)
 		(stroke
 			(width 0.12)
 			(type solid)
@@ -105,8 +105,8 @@
 		(uuid "7366fa45-b124-43ee-98ee-c77ff40730ce")
 	)
 	(fp_line
-		(start 1.74 -1.91)
-		(end 0.76 -1.91)
+		(start 1.74 -3.5)
+		(end 0.76 -3.5)
 		(stroke
 			(width 0.12)
 			(type solid)
@@ -115,8 +115,8 @@
 		(uuid "3dc4dc30-1298-4b5b-9b67-21043c3eea91")
 	)
 	(fp_line
-		(start 1.74 1.91)
-		(end 0.76 1.91)
+		(start 1.74 3.5)
+		(end 0.76 3.5)
 		(stroke
 			(width 0.12)
 			(type solid)
@@ -125,8 +125,8 @@
 		(uuid "34186804-a005-4dfd-8cfb-2cb9a34bef6c")
 	)
 	(fp_line
-		(start 4.61 -1.91)
-		(end 3.26 -1.91)
+		(start 4.61 -3.5)
+		(end 3.26 -3.5)
 		(stroke
 			(width 0.12)
 			(type solid)
@@ -135,8 +135,8 @@
 		(uuid "0aefcc37-8c5d-41fd-a764-3f7f5c5cbe03")
 	)
 	(fp_line
-		(start 4.61 -1.91)
-		(end 4.61 1.91)
+		(start 4.61 -3.5)
+		(end 4.61 3.5)
 		(stroke
 			(width 0.12)
 			(type solid)
@@ -145,8 +145,8 @@
 		(uuid "a81cb911-c70f-43d9-9633-c488f25db998")
 	)
 	(fp_line
-		(start 4.61 1.91)
-		(end 3.26 1.91)
+		(start 4.61 3.5)
+		(end 3.26 3.5)
 		(stroke
 			(width 0.12)
 			(type solid)
@@ -155,8 +155,8 @@
 		(uuid "c02d04ae-1fc5-4903-a8db-fd9b3598b6bc")
 	)
 	(fp_line
-		(start -4.75 -2.25)
-		(end -4.75 2.25)
+		(start -4.75 -3.8)
+		(end -4.75 3.8)
 		(stroke
 			(width 0.05)
 			(type solid)
@@ -165,8 +165,8 @@
 		(uuid "31cf3053-f0f5-43ba-8f93-2f28b3b88d3c")
 	)
 	(fp_line
-		(start -4.75 -2.25)
-		(end 4.75 -2.25)
+		(start -4.75 -3.8)
+		(end 4.75 -3.8)
 		(stroke
 			(width 0.05)
 			(type solid)
@@ -175,8 +175,8 @@
 		(uuid "615d43b9-7e83-4d38-82bd-5975f7d9c279")
 	)
 	(fp_line
-		(start 4.75 -2.25)
-		(end 4.75 2.25)
+		(start 4.75 -3.8)
+		(end 4.75 3.8)
 		(stroke
 			(width 0.05)
 			(type solid)
@@ -185,8 +185,8 @@
 		(uuid "2e93bc2e-0033-442e-99d4-de3aaa50aa46")
 	)
 	(fp_line
-		(start 4.75 2.25)
-		(end -4.75 2.25)
+		(start 4.75 3.8)
+		(end -4.75 3.8)
 		(stroke
 			(width 0.05)
 			(type solid)
@@ -195,8 +195,8 @@
 		(uuid "c9a9ade5-e917-4fa1-96c4-50fdcb1dc01f")
 	)
 	(fp_line
-		(start -4.5 -1.8)
-		(end 4.5 -1.8)
+		(start -4.5 -3.45)
+		(end 4.5 -3.45)
 		(stroke
 			(width 0.1)
 			(type solid)
@@ -205,8 +205,8 @@
 		(uuid "896bdac4-fa7b-4b32-aa2b-41a28f600d66")
 	)
 	(fp_line
-		(start -4.5 1.8)
-		(end -4.5 -1.8)
+		(start -4.5 3.45)
+		(end -4.5 -3.45)
 		(stroke
 			(width 0.1)
 			(type solid)
@@ -265,8 +265,8 @@
 		(uuid "b30c1baf-0725-4481-8602-8a7e69e73c88")
 	)
 	(fp_line
-		(start 4.5 -1.8)
-		(end 4.5 1.8)
+		(start 4.5 -3.45)
+		(end 4.5 3.45)
 		(stroke
 			(width 0.1)
 			(type solid)
@@ -275,8 +275,8 @@
 		(uuid "7d829d0b-1e80-4a43-a617-2d933e95cbca")
 	)
 	(fp_line
-		(start 4.5 1.8)
-		(end -4.5 1.8)
+		(start 4.5 3.45)
+		(end -4.5 3.45)
 		(stroke
 			(width 0.1)
 			(type solid)
@@ -296,37 +296,37 @@
 		)
 	)
 	(pad "1" smd rect
-		(at -2.5 1.25)
+		(at -2.5 2.85)
 		(size 1.2 1.6)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(uuid "bcf3e516-ec48-41ae-812a-8eec4015a976")
 	)
 	(pad "2" smd rect
-		(at 0 1.25)
+		(at 0 2.85)
 		(size 1.2 1.6)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(uuid "dc35dcde-f6bf-4870-95f8-c47e7d84c602")
 	)
 	(pad "3" smd rect
-		(at 2.5 1.25)
+		(at 2.5 2.85)
 		(size 1.2 1.6)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(uuid "2de820b0-c817-440d-ae12-65ff54dd7fc6")
 	)
 	(pad "4" smd rect
-		(at 2.5 -1.25)
+		(at 2.5 -2.85)
 		(size 1.2 1.6)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(uuid "0e2ace89-3bdb-45e0-a691-47711681b61c")
 	)
 	(pad "5" smd rect
-		(at 0 -1.25)
+		(at 0 -2.85)
 		(size 1.2 1.6)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(uuid "edde10ec-fb01-4cd8-b86a-a564b8bf547a")
 	)
 	(pad "6" smd rect
-		(at -2.5 -1.25)
+		(at -2.5 -2.85)
 		(size 1.2 1.6)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(uuid "fd4fc2ce-a6cb-4cea-9c97-a9692d9f0111")
