@@ -127,6 +127,11 @@ class PyScriptFallbackLoader {
             animation: slideDown 0.5s ease-out;
         `;
         
+        const isOffAxis = window.location.href.includes('offaxis');
+        const warningMessage = isOffAxis 
+            ? 'Off-axis holographic reconstruction requires full FFT processing and is not available in fallback mode.'
+            : 'Using simplified JavaScript processing without full holographic reconstruction.';
+        
         notification.innerHTML = `
             <div style="display: flex; align-items: center; gap: 15px;">
                 <div style="font-size: 28px;">📱</div>
@@ -135,7 +140,7 @@ class PyScriptFallbackLoader {
                         JavaScript Fallback Mode Active
                     </div>
                     <div style="font-size: 0.9em; opacity: 0.95;">
-                        PyScript is not available on this device. Using simplified JavaScript processing instead.
+                        PyScript is not available on this device. ${warningMessage}
                     </div>
                 </div>
                 <button onclick="this.parentElement.parentElement.remove()" 
@@ -164,13 +169,13 @@ class PyScriptFallbackLoader {
         
         document.body.appendChild(notification);
         
-        // Auto-dismiss after 10 seconds
+        // Auto-dismiss after 15 seconds (longer for important message)
         setTimeout(() => {
             if (notification.parentElement) {
                 notification.style.animation = 'slideDown 0.5s ease-out reverse';
                 setTimeout(() => notification.remove(), 500);
             }
-        }, 10000);
+        }, 15000);
     }
 
     /**
