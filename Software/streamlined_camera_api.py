@@ -88,7 +88,8 @@ camera_state = {
     "awb_gains": {"red": 1.5, "blue": 1.5},
     "resolution": {"width": 640, "height": 480},
     "color_mode": "rgb",
-    "streaming": False
+    "streaming": False,
+    "stream_config": None  # Store streaming configuration
 }
 
 # Serve static files
@@ -178,15 +179,66 @@ class WiFiConfig(BaseModel):
     password: str | None = None
 
 # Utility functions
-def _capture() -> np.ndarray:
+def _capture(highRes: bool=False) -> np.ndarray:
     """Capture a frame from the camera"""
     if CAMERA_AVAILABLE:
-        req = picam.capture_request()
-        arr = req.make_array("main")
-        req.release()
-        return arr
+        if highRes:
+            # Store current streaming configuration
+            current_res = camera_state["resolution"]
+            stream_config = picam.create_video_configuration(main={"size": (current_res["width"], current_res["height"])})
+            
+            # Switch to high resolution (e.g., 1920x1080 or max available)
+            high_res_config = picam.create_video_configuration(main={"size": (1920, 1080)})
+            picam.stop()
+            picam.configure(high_res_config)
+            picam.start()
+            
+            # Capture high resolution frame
+            req = picam.capture_request()
+            arr = req.make_array("main")
+            req.release()
+            
+            # Restore streaming configuration immediately
+            picam.stop()
+            picam.configure(stream_config)
+            picam.start()
+             
+            arr = _crop_image(arr, center=(frame.shape[1] // 2, frame.shape[0] // 2), size=(640, 480))
+
+            return arr
+        else:
+            # Normal capture at current resolution
+            req = picam.capture_request()
+            arr = req.make_array("main")
+            req.release()
+            return arr
     else:
-        return picam.capture_request().make_array("main")
+        if highRes:
+            print("Mock: High resolution capture requested, using simulated high-res frame.")
+            # Create larger mock frame for high resolution
+            frame = np.random.randint(0, 255, (1080, 1920, 3), dtype=np.uint8)
+            cv2.rectangle(frame, (960, 540), (1110, 690), (255, 255, 255), -1)
+            frame = _crop_image(frame, center=(frame.shape[1] // 2, frame.shape[0] // 2), size=(640, 480))
+            return frame
+        else:
+            return picam.capture_request().make_array("main")
+
+def _crop_image(img: np.ndarray, center: tuple[int, int], size: tuple[int, int]) -> np.ndarray:
+    """Crop image around center to specified size"""
+    h, w = img.shape[:2]
+    ch, cw = size[1] // 2, size[0] // 2
+    x1 = max(0, center[0] - cw)
+    y1 = max(0, center[1] - ch)
+    x2 = min(w, center[0] + cw)
+    y2 = min(h, center[1] + ch)
+    return img[y1:y2, x1:x2]
+
+def _restore_stream_config():
+    """Restore the streaming configuration after a high-res capture"""
+    if CAMERA_AVAILABLE and camera_state["stream_config"] is not None:
+        picam.stop()
+        picam.configure(camera_state["stream_config"])
+        picam.start()
 
 def _jpeg(frame: np.ndarray) -> bytes:
     """Encode frame as JPEG"""
@@ -209,9 +261,15 @@ def favicon():
     return RedirectResponse(url="/static/assets/favicon.ico", status_code=301)
 
 @app.get("/snapshot", summary="Single JPEG frame")
-def snapshot() -> Response:
+def snapshot(isHighRes: bool = False) -> Response:
     """Get a single JPEG image from the camera"""
-    img = _jpeg(_capture())
+    img = _jpeg(_capture(highRes=isHighRes))
+    return Response(content=img, media_type="image/jpeg")
+
+@app.get("/snapshot/highres", summary="High resolution JPEG frame")
+def snapshot_highres() -> Response:
+    """Get a high resolution JPEG image from the camera"""
+    img = _jpeg(_capture(highRes=True))
     return Response(content=img, media_type="image/jpeg")
 
 @app.get("/stream", summary="MJPEG stream")
@@ -220,6 +278,11 @@ def stream():
     boundary = b"frame"
     def gen():
         camera_state["streaming"] = True
+        # Store current stream configuration
+        if CAMERA_AVAILABLE:
+            camera_state["stream_config"] = picam.create_video_configuration(
+                main={"size": (camera_state["resolution"]["width"], camera_state["resolution"]["height"])}
+            )
         try:
             while True:
                 yield (

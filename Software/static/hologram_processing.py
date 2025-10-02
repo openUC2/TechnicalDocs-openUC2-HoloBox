@@ -565,6 +565,10 @@ try:
     # Test with a single frame to verify everything works
     process_image_for_hologram()
     
+    # Make processStaticImage available globally for JavaScript
+    from js import window
+    window.processStaticImage = create_proxy(lambda: process_image_for_hologram())
+    
 except Exception as e:
     console.log(f"❌ Error setting up event listeners: {e}")
     import traceback
