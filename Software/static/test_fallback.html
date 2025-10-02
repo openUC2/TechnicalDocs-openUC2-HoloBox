@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PyScript Fallback Test</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+        
+        .test-section {
+            background: #2d2d2d;
+            border: 1px solid #444;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .test-section h2 {
+            margin-top: 0;
+            color: #667eea;
+        }
+        
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        
+        .status.pass {
+            background: rgba(40, 167, 69, 0.2);
+            border-left: 4px solid #28a745;
+        }
+        
+        .status.fail {
+            background: rgba(220, 53, 69, 0.2);
+            border-left: 4px solid #dc3545;
+        }
+        
+        .status.info {
+            background: rgba(102, 126, 234, 0.2);
+            border-left: 4px solid #667eea;
+        }
+        
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        
+        button:hover {
+            background: #5568d3;
+        }
+        
+        .code {
+            background: #1a1a1a;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            overflow-x: auto;
+        }
+        
+        #console-log {
+            background: #000;
+            color: #0f0;
+            padding: 15px;
+            border-radius: 4px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 PyScript Fallback System Test</h1>
+    
+    <div class="test-section">
+        <h2>Platform Detection</h2>
+        <div id="platform-tests"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Fallback Loader Status</h2>
+        <div id="loader-status"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Feature Detection</h2>
+        <div id="feature-tests"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Manual Tests</h2>
+        <button onclick="testForceInitialization()">Force Fallback Initialization</button>
+        <button onclick="testDetection()">Re-run Detection</button>
+        <button onclick="clearConsole()">Clear Console</button>
+        <div id="manual-test-results"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Console Output</h2>
+        <div id="console-log"></div>
+    </div>
+
+    <script>
+        // Capture console.log for display
+        const consoleOutput = [];
+        const originalLog = console.log;
+        const originalWarn = console.warn;
+        const originalError = console.error;
+        
+        console.log = function(...args) {
+            consoleOutput.push({ type: 'log', msg: args.join(' ') });
+            updateConsoleDisplay();
+            originalLog.apply(console, args);
+        };
+        
+        console.warn = function(...args) {
+            consoleOutput.push({ type: 'warn', msg: args.join(' ') });
+            updateConsoleDisplay();
+            originalWarn.apply(console, args);
+        };
+        
+        console.error = function(...args) {
+            consoleOutput.push({ type: 'error', msg: args.join(' ') });
+            updateConsoleDisplay();
+            originalError.apply(console, args);
+        };
+        
+        function updateConsoleDisplay() {
+            const consoleDiv = document.getElementById('console-log');
+            consoleDiv.innerHTML = consoleOutput.map(entry => {
+                let color = '#0f0';
+                if (entry.type === 'warn') color = '#ff0';
+                if (entry.type === 'error') color = '#f00';
+                return `<div style="color: ${color}">[${entry.type}] ${entry.msg}</div>`;
+            }).join('');
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }
+        
+        function clearConsole() {
+            consoleOutput.length = 0;
+            updateConsoleDisplay();
+        }
+        
+        function addStatus(containerId, message, type) {
+            const container = document.getElementById(containerId);
+            const statusDiv = document.createElement('div');
+            statusDiv.className = `status ${type}`;
+            statusDiv.innerHTML = message;
+            container.appendChild(statusDiv);
+        }
+        
+        function runPlatformTests() {
+            const userAgent = navigator.userAgent;
+            const platform = navigator.platform;
+            
+            addStatus('platform-tests', `<strong>User Agent:</strong> ${userAgent}`, 'info');
+            addStatus('platform-tests', `<strong>Platform:</strong> ${platform}`, 'info');
+            
+            // Test iOS detection
+            const isIOS = /iPad|iPhone|iPod/.test(userAgent);
+            const isIPadPro = platform === 'MacIntel' && 
+                             typeof navigator.maxTouchPoints !== 'undefined' && 
+                             navigator.maxTouchPoints > 1;
+            
+            if (isIOS) {
+                addStatus('platform-tests', '✅ iOS device detected via user agent', 'pass');
+            } else if (isIPadPro) {
+                addStatus('platform-tests', '✅ iPad Pro detected via platform check', 'pass');
+            } else {
+                addStatus('platform-tests', 'ℹ️ Not an iOS device', 'info');
+            }
+        }
+        
+        function runFeatureTests() {
+            // WebAssembly test
+            try {
+                if (typeof WebAssembly === 'object' && 
+                    typeof WebAssembly.instantiate === 'function') {
+                    const module = new WebAssembly.Module(
+                        Uint8Array.of(0x0, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00)
+                    );
+                    if (module instanceof WebAssembly.Module) {
+                        addStatus('feature-tests', '✅ WebAssembly is supported', 'pass');
+                    }
+                } else {
+                    addStatus('feature-tests', '❌ WebAssembly is NOT supported', 'fail');
+                }
+            } catch (e) {
+                addStatus('feature-tests', `❌ WebAssembly test failed: ${e.message}`, 'fail');
+            }
+            
+            // SharedArrayBuffer test
+            try {
+                if (typeof SharedArrayBuffer !== 'undefined') {
+                    addStatus('feature-tests', '✅ SharedArrayBuffer is supported', 'pass');
+                } else {
+                    addStatus('feature-tests', '⚠️ SharedArrayBuffer is NOT supported', 'info');
+                }
+            } catch (e) {
+                addStatus('feature-tests', `⚠️ SharedArrayBuffer is NOT available: ${e.message}`, 'info');
+            }
+        }
+        
+        function checkLoaderStatus() {
+            if (typeof window.PyScriptFallbackLoader !== 'undefined') {
+                addStatus('loader-status', '✅ PyScriptFallbackLoader class is available', 'pass');
+                
+                if (typeof window.pyScriptFallbackLoader !== 'undefined') {
+                    addStatus('loader-status', '✅ Fallback loader instance is initialized', 'pass');
+                    
+                    const loader = window.pyScriptFallbackLoader;
+                    addStatus('loader-status', `<strong>Fallback Mode:</strong> ${loader.isFallbackMode}`, 'info');
+                    addStatus('loader-status', `<strong>PyScript Available:</strong> ${loader.isPyScriptAvailable}`, 'info');
+                } else {
+                    addStatus('loader-status', '⏳ Fallback loader not yet initialized', 'info');
+                }
+            } else {
+                addStatus('loader-status', '❌ PyScriptFallbackLoader not loaded', 'fail');
+            }
+        }
+        
+        function testForceInitialization() {
+            const resultsDiv = document.getElementById('manual-test-results');
+            resultsDiv.innerHTML = '';
+            
+            if (typeof window.PyScriptFallbackLoader === 'undefined') {
+                addStatus('manual-test-results', '❌ Cannot test - loader not available', 'fail');
+                return;
+            }
+            
+            addStatus('manual-test-results', 'ℹ️ Attempting to force fallback initialization...', 'info');
+            
+            // Create a new instance for testing
+            const testLoader = new window.PyScriptFallbackLoader();
+            testLoader.initializeFallback().then(success => {
+                if (success) {
+                    addStatus('manual-test-results', '✅ Fallback initialized successfully!', 'pass');
+                } else {
+                    addStatus('manual-test-results', '❌ Fallback initialization failed', 'fail');
+                }
+            }).catch(err => {
+                addStatus('manual-test-results', `❌ Error: ${err.message}`, 'fail');
+            });
+        }
+        
+        function testDetection() {
+            const resultsDiv = document.getElementById('manual-test-results');
+            resultsDiv.innerHTML = '';
+            
+            if (typeof window.PyScriptFallbackLoader === 'undefined') {
+                addStatus('manual-test-results', '❌ Cannot test - loader not available', 'fail');
+                return;
+            }
+            
+            const testLoader = new window.PyScriptFallbackLoader();
+            const shouldFallback = testLoader.shouldUseFallback();
+            
+            addStatus('manual-test-results', 
+                `<strong>Should use fallback:</strong> ${shouldFallback}`, 
+                shouldFallback ? 'info' : 'pass'
+            );
+            
+            addStatus('manual-test-results', 
+                `<strong>iOS Device:</strong> ${testLoader.isIOSDevice()}`, 
+                'info'
+            );
+            
+            addStatus('manual-test-results', 
+                `<strong>WASM Supported:</strong> ${testLoader.isWasmSupported()}`, 
+                'info'
+            );
+            
+            addStatus('manual-test-results', 
+                `<strong>SAB Supported:</strong> ${testLoader.isSharedArrayBufferSupported()}`, 
+                'info'
+            );
+        }
+        
+        // Run tests when page loads
+        window.addEventListener('load', () => {
+            console.log('🧪 Running fallback system tests...');
+            
+            runPlatformTests();
+            runFeatureTests();
+            checkLoaderStatus();
+            
+            // Check again after a delay to see if loader initialized
+            setTimeout(() => {
+                if (document.getElementById('loader-status').children.length <= 2) {
+                    checkLoaderStatus();
+                }
+            }, 2000);
+        });
+    </script>
+    
+    <!-- Load the fallback loader -->
+    <script src="./js/pyscript_fallback_loader.js"></script>
+</body>
+</html>
