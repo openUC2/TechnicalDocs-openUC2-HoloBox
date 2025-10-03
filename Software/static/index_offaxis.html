@@ -14,7 +14,8 @@
   <script type="module" src="./js/pyscript/core.js"></script>
   <link rel="stylesheet" href="./js/pyscript/core.css">
   
-  <style>
+<!-- PyScript Fallback Loader for iOS/iPad compatibility -->
+<script src="./js/pyscript_fallback_loader.js"></script>  <style>
     /* Dark Theme Variables */
     :root {
       --dark-bg: #1a1a1a;
@@ -398,6 +399,66 @@
     </div>
   </div>
 
+  <!-- Debug and Testing Controls -->
+  <div class="controls-panel">
+    <div class="panel-header collapsed" onclick="togglePanel(this)">
+      <h4>🔧 Debug & Testing Controls</h4>
+      <span class="panel-toggle">▼</span>
+    </div>
+    <div class="panel-content">
+      <!-- Current Processing Mode Status -->
+      <div class="row mb-3">
+        <div class="col-12">
+          <div class="alert alert-secondary" role="alert">
+            <strong>Current Processing Mode:</strong> 
+            <span id="current-processing-mode">Loading...</span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Mode Override Controls -->
+      <div class="row g-3 mb-3">
+        <div class="col-md-6">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="force-fallback-mode">
+            <label class="form-check-label" for="force-fallback-mode">
+              Force JavaScript Fallback Mode
+            </label>
+          </div>
+          <small class="text-muted">Override PyScript detection and force JavaScript processing</small>
+        </div>
+        <div class="col-md-6">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="enable-opencv-fallback">
+            <label class="form-check-label" for="enable-opencv-fallback">
+              Enable OpenCV.js for Full Processing
+            </label>
+          </div>
+          <small class="text-muted">Load OpenCV.js for complete holographic reconstruction</small>
+        </div>
+      </div>
+      
+      <!-- Test Controls -->
+      <div class="row g-3">
+        <div class="col-auto">
+          <button id="test-processing-mode" class="btn btn-info">Test Current Mode</button>
+        </div>
+        <div class="col-auto">
+          <button id="reload-pyscript" class="btn btn-warning">Reload Page</button>
+        </div>
+      </div>
+      
+      <!-- Instructions -->
+      <div class="mt-3">
+        <small class="text-muted">
+          <strong>For Local Development:</strong> 
+          Enable "Force JavaScript Fallback Mode" to test without PyScript. 
+          For full off-axis reconstruction, also enable "OpenCV.js for Full Processing".
+        </small>
+      </div>
+    </div>
+  </div>
+
   <!-- Off-Axis Processing Parameters -->
   <div class="controls-panel">
     <div class="panel-header collapsed" onclick="togglePanel(this)">
@@ -571,9 +632,243 @@ function updateROIFromInputs() {
     drawROIOverlay();
 }
 
+// Debug and fallback mode controls
+let debugMode = false;
+let forceFallbackMode = false;
+let opencvEnabled = false;
+let currentProcessingMode = 'unknown';
+
+function updateProcessingModeStatus() {
+    const statusElement = document.getElementById('current-processing-mode');
+    if (statusElement) {
+        let mode = 'Unknown';
+        let color = 'secondary';
+        
+        if (forceFallbackMode) {
+            if (typeof cv !== 'undefined') {
+                mode = 'JavaScript Fallback + OpenCV.js (Forced)';
+                color = 'success';
+            } else {
+                mode = 'JavaScript Fallback (Forced)';
+                color = 'warning';
+            }
+        } else if (window.pyScriptFallbackLoader?.isFallbackMode) {
+            if (typeof cv !== 'undefined') {
+                mode = 'JavaScript Fallback + OpenCV.js (Auto)';
+                color = 'success';
+            } else {
+                mode = 'JavaScript Fallback (Auto)';
+                color = 'info';
+            }
+        } else if (typeof pyscript !== 'undefined' || typeof pyodide !== 'undefined') {
+            mode = 'PyScript/Pyodide';
+            color = 'success';
+        } else {
+            mode = 'Loading...';
+            color = 'secondary';
+        }
+        
+        statusElement.textContent = mode;
+        statusElement.parentElement.className = `alert alert-${color}`;
+        currentProcessingMode = mode;
+        
+        // Log current state for debugging
+        console.log(`🔧 Processing mode: ${mode}`);
+        console.log(`🔧 OpenCV available: ${typeof cv !== 'undefined'}`);
+        console.log(`🔧 PyScript available: ${typeof pyscript !== 'undefined'}`);
+        console.log(`🔧 Fallback loader active: ${window.pyScriptFallbackLoader?.isFallbackMode}`);
+    }
+}
+
+function testCurrentProcessingMode() {
+    console.log('🧪 Testing current processing mode...');
+    updateProcessingModeStatus();
+    
+    // Test if PyScript functions are available
+    if (typeof window.processCurrentFrame === 'function') {
+        console.log('✅ PyScript processing functions available');
+        try {
+            window.processCurrentFrame();
+            alert('✅ PyScript processing test successful!');
+        } catch (e) {
+            console.error('❌ PyScript processing failed:', e);
+            alert('❌ PyScript processing failed. Check console for details.');
+        }
+    } else if (window.offAxisProcessor) {
+        console.log('✅ Off-axis fallback processing available');
+        try {
+            window.offAxisProcessor.processCurrentFrame();
+            alert('✅ Fallback processing test successful!');
+        } catch (e) {
+            console.error('❌ Fallback processing failed:', e);
+            alert('❌ Fallback processing failed. Check console for details.');
+        }
+    } else if (window.hologramProcessor) {
+        console.log('✅ General fallback processing available');
+        try {
+            window.hologramProcessor.processSingleFrame();
+            alert('✅ General fallback processing test successful!');
+        } catch (e) {
+            console.error('❌ General fallback processing failed:', e);
+            alert('❌ General fallback processing failed. Check console for details.');
+        }
+    } else {
+        console.log('⚠️ No processing functions available');
+        alert('⚠️ No processing functions available. Try enabling "Force JavaScript Fallback Mode" first.');
+    }
+}
+
+function reloadPyScript() {
+    console.log('🔄 Reloading PyScript...');
+    location.reload();
+}
+
+function initializeDebugControls() {
+    // Force fallback mode toggle
+    const forceFallbackToggle = document.getElementById('force-fallback-mode');
+    if (forceFallbackToggle) {
+        forceFallbackToggle.addEventListener('change', function(e) {
+            forceFallbackMode = e.target.checked;
+            console.log(`🔧 Force fallback mode: ${forceFallbackMode}`);
+            
+            if (forceFallbackMode) {
+                // Override the fallback loader to force fallback mode
+                if (window.pyScriptFallbackLoader) {
+                    window.pyScriptFallbackLoader.isFallbackMode = false;
+                    window.pyScriptFallbackLoader.initializeFallback();
+                } else {
+                    // Manually initialize fallback if loader isn't ready
+                    loadFallbackManually();
+                }
+            }
+            updateProcessingModeStatus();
+        });
+    }
+    
+    // OpenCV.js toggle
+    const opencvToggle = document.getElementById('enable-opencv-fallback');
+    if (opencvToggle) {
+        opencvToggle.addEventListener('change', function(e) {
+            opencvEnabled = e.target.checked;
+            console.log(`🔧 OpenCV.js enabled: ${opencvEnabled}`);
+            
+            if (opencvEnabled && !window.cv) {
+                loadOpenCVJS();
+            }
+        });
+    }
+    
+    // Test button
+    const testButton = document.getElementById('test-processing-mode');
+    if (testButton) {
+        testButton.addEventListener('click', testCurrentProcessingMode);
+    }
+    
+    // Reload button
+    const reloadButton = document.getElementById('reload-pyscript');
+    if (reloadButton) {
+        reloadButton.addEventListener('click', reloadPyScript);
+    }
+    
+    // Initial status update
+    updateProcessingModeStatus();
+}
+
+function loadFallbackManually() {
+    console.log('🔧 Manually loading fallback processor for off-axis holography...');
+    
+    // Set the global flag
+    window.forceFallbackMode = true;
+    
+    // Use the fallback loader's force method if available
+    if (window.pyScriptFallbackLoader && typeof window.pyScriptFallbackLoader.forceFallbackMode === 'function') {
+        window.pyScriptFallbackLoader.forceFallbackMode()
+            .then(() => {
+                console.log('✅ Fallback mode forced successfully');
+                updateProcessingModeStatus();
+            })
+            .catch((error) => {
+                console.error('❌ Failed to force fallback mode:', error);
+            });
+    } else {
+        // Fallback to direct script loading
+        if (typeof window.OffAxisHologramProcessor === 'undefined') {
+            const script = document.createElement('script');
+            script.src = './js/hologram_processing_fallback.js';
+            script.onload = function() {
+                console.log('✅ Fallback script loaded');
+                if (typeof window.OffAxisHologramProcessor !== 'undefined') {
+                    window.processor = new window.OffAxisHologramProcessor('canvas');
+                    console.log('✅ Off-axis holography fallback processor initialized');
+                    updateProcessingModeStatus();
+                }
+            };
+            script.onerror = function() {
+                console.error('❌ Failed to load fallback script');
+            };
+            document.head.appendChild(script);
+        } else {
+            // Already loaded, just initialize
+            window.processor = new window.OffAxisHologramProcessor('canvas');
+            updateProcessingModeStatus();
+        }
+    }
+}
+
+function loadOpenCVJS() {
+    console.log('📥 Loading OpenCV.js manually...');
+    
+    // Use the fallback loader's OpenCV loading method if available
+    if (window.pyScriptFallbackLoader && typeof window.pyScriptFallbackLoader.loadOpenCV === 'function') {
+        window.pyScriptFallbackLoader.loadOpenCV()
+            .then(() => {
+                console.log('✅ OpenCV.js loaded via fallback loader');
+                updateProcessingModeStatus();
+            })
+            .catch((error) => {
+                console.error('❌ Failed to load OpenCV.js via fallback loader:', error);
+                document.getElementById('enable-opencv-fallback').checked = false;
+                opencvEnabled = false;
+            });
+    } else {
+        // Fallback to direct loading
+        const script = document.createElement('script');
+        script.src = 'https://docs.opencv.org/4.8.0/opencv.js';
+        script.async = true;
+        
+        script.onload = function() {
+            console.log('✅ OpenCV.js script loaded directly');
+            
+            // Set up runtime initialization callback
+            if (typeof cv !== 'undefined') {
+                cv.onRuntimeInitialized = function() {
+                    console.log('✅ OpenCV.js runtime initialized directly');
+                    updateProcessingModeStatus();
+                };
+            } else {
+                setTimeout(() => {
+                    if (typeof cv !== 'undefined') {
+                        console.log('✅ OpenCV.js available after delay');
+                        updateProcessingModeStatus();
+                    }
+                }, 2000);
+            }
+        };
+        
+        script.onerror = function() {
+            console.error('❌ Failed to load OpenCV.js directly');
+            document.getElementById('enable-opencv-fallback').checked = false;
+            opencvEnabled = false;
+        };
+        
+        document.head.appendChild(script);
+    }
+}
+
 // Set up event listeners when page loads
 document.addEventListener('DOMContentLoaded', function() {
     setupFourierCanvasInteraction();
+    initializeDebugControls();
     
     // ROI input listeners
     document.getElementById('roi-x').addEventListener('input', updateROIFromInputs);
@@ -590,6 +885,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Update URL input with current origin
     document.getElementById('host').value = window.location.origin;
+    
+    // Update processing mode status periodically
+    setInterval(updateProcessingModeStatus, 2000);
 });
 </script>
 
