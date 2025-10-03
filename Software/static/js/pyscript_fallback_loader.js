@@ -74,7 +74,7 @@ class PyScriptFallbackLoader {
      * Determine if we should use fallback mode
      */
     shouldUseFallback() {
-        const isIOS = this.isIOSDevice();
+        const isIOS = this.isIOSDevice(); // Back to normal detection for now
         const hasWasm = this.isWasmSupported();
         const hasSAB = this.isSharedArrayBufferSupported();
         
@@ -82,10 +82,17 @@ class PyScriptFallbackLoader {
         console.log(`  - iOS/iPadOS: ${isIOS}`);
         console.log(`  - WebAssembly: ${hasWasm}`);
         console.log(`  - SharedArrayBuffer: ${hasSAB}`);
+        console.log(`  - Force fallback: ${window.forceFallbackMode || false}`);
+        
+        // Check for manual override first
+        if (window.forceFallbackMode === true) {
+            console.log("🔧 Fallback mode forced via debug controls");
+            return true;
+        }
         
         // Use fallback if on iOS (known issues) or missing critical features
         if (isIOS) {
-            console.log("⚠️ iOS/iPadOS detected - PyScript/Pyodide may not work reliably");
+            console.log("⚠️ iOS/iPadOS detected - using JavaScript fallback with OpenCV.js");
             return true;
         }
         
@@ -216,15 +223,66 @@ class PyScriptFallbackLoader {
         
         try {
             // Load the fallback script if not already loaded
-            if (typeof window.HologramProcessorFallback === 'undefined') {
+            if (typeof window.HologramProcessorFallback === 'undefined' && 
+                typeof window.HologramProcessorOpenCV === 'undefined' &&
+                typeof window.OffAxisHologramProcessor === 'undefined') {
+                console.log("📥 Loading fallback processing script...");
                 await this.loadScript('./js/hologram_processing_fallback.js');
+                
+                // Wait a moment for the script to be processed
+                await new Promise(resolve => setTimeout(resolve, 500));
             }
             
-            // Create and initialize the fallback processor
-            this.fallbackProcessor = new window.HologramProcessorFallback();
-            this.fallbackProcessor.initializeEventListeners();
+            // For off-axis pages, load OpenCV.js automatically when using fallback
+            const isOffAxisPage = window.location.href.includes('offaxis') || 
+                                  window.location.href.includes('index_offaxis');
             
-            this.isFallbackMode = true;
+            if (!isOffAxisPage && typeof window.cv === 'undefined') {
+                console.log("📥 Loading OpenCV.js for inline processing...");
+                try {
+                    await this.loadOpenCV();
+                } catch (e) {
+                    console.warn("⚠️ OpenCV.js loading failed, continuing with basic fallback:", e);
+                }
+            } else if (isOffAxisPage && typeof window.cv === 'undefined') {
+                console.log("📥 Loading OpenCV.js for off-axis processing...");
+                try {
+                    await this.loadOpenCV();
+                } catch (e) {
+                    console.warn("⚠️ OpenCV.js loading failed for off-axis, using simplified processing:", e);
+                }
+            }
+            
+            // Initialize appropriate processor based on page type
+            if (isOffAxisPage && typeof window.OffAxisHologramProcessor !== 'undefined') {
+                console.log("🚀 Initializing off-axis fallback processor");
+                this.fallbackProcessor = new window.OffAxisHologramProcessor();
+                this.fallbackProcessor.initializeEventListeners();
+                window.offAxisProcessor = this.fallbackProcessor;
+            } else if (typeof window.HologramProcessorOpenCV !== 'undefined') {
+                console.log("🚀 Initializing general/inline fallback processor");
+                this.fallbackProcessor = new window.HologramProcessorOpenCV();
+                this.fallbackProcessor.initializeEventListeners();
+                // Also expose as HologramProcessorFallback for compatibility
+                window.HologramProcessorFallback = window.HologramProcessorOpenCV;
+                window.hologramProcessor = this.fallbackProcessor;
+                
+                // For inline holography, also expose as holoCV
+                if (!isOffAxisPage) {
+                    window.holoCV = this.fallbackProcessor;
+                }
+            } else {
+                console.warn("⚠️ No fallback processor class found, creating minimal fallback");
+                // Create a minimal fallback if no proper class is available
+                this.fallbackProcessor = {
+                    initializeEventListeners: () => console.log("Minimal fallback processor initialized"),
+                    processImageForHologram: () => console.log("Processing with minimal fallback")
+                };
+                window.hologramProcessor = this.fallbackProcessor;
+                window.holoCV = this.fallbackProcessor;
+            }
+            
+            this.isFallbackMode = false;
             this.showFallbackNotification();
             this.updateStatusIndicators();
             
@@ -233,8 +291,61 @@ class PyScriptFallbackLoader {
             
         } catch (e) {
             console.error("❌ Failed to initialize fallback:", e);
+            console.log("🔧 Creating emergency minimal fallback");
+            
+            // Emergency fallback
+            this.fallbackProcessor = {
+                initializeEventListeners: () => console.log("Emergency fallback processor initialized"),
+                processImageForHologram: () => console.log("Processing with emergency fallback")
+            };
+            window.hologramProcessor = this.fallbackProcessor;
+            window.holoCV = this.fallbackProcessor;
+            this.isFallbackMode = false;
+            
             return false;
         }
+    }
+
+    /**
+     * Load OpenCV.js for advanced processing
+     */
+    async loadOpenCV() {
+        return new Promise((resolve, reject) => {
+            console.log("📥 Loading OpenCV.js...");
+            
+            const script = document.createElement('script');
+            script.src = 'https://docs.opencv.org/4.8.0/opencv.js';
+            script.async = true;
+            
+            script.onload = () => {
+                console.log("✅ OpenCV.js script loaded");
+                
+                // Wait for OpenCV to initialize
+                if (typeof cv !== 'undefined') {
+                    cv.onRuntimeInitialized = () => {
+                        console.log("✅ OpenCV.js runtime initialized");
+                        resolve();
+                    };
+                } else {
+                    // Fallback: wait a bit and check again
+                    setTimeout(() => {
+                        if (typeof cv !== 'undefined') {
+                            console.log("✅ OpenCV.js available after delay");
+                            resolve();
+                        } else {
+                            reject(new Error("OpenCV.js failed to initialize"));
+                        }
+                    }, 2000);
+                }
+            };
+            
+            script.onerror = (error) => {
+                console.error("❌ Failed to load OpenCV.js:", error);
+                reject(error);
+            };
+            
+            document.head.appendChild(script);
+        });
     }
 
     /**
@@ -266,7 +377,11 @@ class PyScriptFallbackLoader {
                 // Check for various indicators that PyScript has initialized
                 if (typeof window.pyscript !== 'undefined' || 
                     typeof window.pyodide !== 'undefined' ||
-                    document.querySelector('py-script[src]')?.hasAttribute('data-initialized')) {
+                    document.querySelector('py-script[src]')?.hasAttribute('data-initialized') ||
+                    // Additional checks for PyScript readiness
+                    document.querySelector('py-script')?.textContent?.includes('✅') ||
+                    // Check for console messages indicating PyScript is ready
+                    window.pyScriptReady === true) {
                     
                     clearTimeout(this.pyScriptInitTimer);
                     clearInterval(checkInterval);
@@ -275,7 +390,26 @@ class PyScriptFallbackLoader {
                     resolve(true);
                 }
             }, 100);
+            
+            // Also listen for PyScript ready events
+            document.addEventListener('py:ready', () => {
+                clearTimeout(this.pyScriptInitTimer);
+                clearInterval(checkInterval);
+                this.isPyScriptAvailable = true;
+                console.log("✅ PyScript ready event received");
+                resolve(true);
+            });
         });
+    }
+
+    /**
+     * Force fallback mode initialization (called manually from debug controls)
+     */
+    async forceFallbackMode() {
+        console.log("🔧 Forcing fallback mode via debug controls");
+        window.forceFallbackMode = true;
+        this.isFallbackMode = false;
+        await this.initializeFallback();
     }
 
     /**
