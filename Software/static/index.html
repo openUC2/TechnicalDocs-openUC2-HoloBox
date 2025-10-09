@@ -339,6 +339,28 @@
       box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
     }
     
+    /* Expert mode toggle */
+    .expert-mode-toggle {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--dark-surface-hover);
+      padding: 10px 20px;
+      border-bottom: 2px solid var(--dark-accent);
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .expert-settings {
+      display: none;
+    }
+    
+    .expert-settings.show {
+      display: block;
+    }
+    
     /* Scrollbars for dark theme */
     ::-webkit-scrollbar {
       width: 8px;
@@ -512,6 +534,17 @@
       <span class="panel-toggle">▼</span>
     </div>
     <div class="panel-content">
+      <!-- Expert Mode Toggle -->
+      <div class="expert-mode-toggle">
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" id="expertModeCamera">
+          <label class="form-check-label" for="expertModeCamera">
+            <strong>🔧 Expert Mode</strong>
+          </label>
+        </div>
+        <small class="text-muted">Show advanced camera settings</small>
+      </div>
+      
       <div class="row g-3">
         <div class="col-auto">
           <button id="startBtn" class="btn btn-success">Start Stream</button>
@@ -527,7 +560,8 @@
         </div>
       </div>
       
-      <!-- Resolution Control -->
+      <!-- Resolution Control - EXPERT MODE -->
+      <div class="expert-settings" id="camera-expert-settings">
       <div class="row g-3 mt-2">
         <div class="col-md-4">
           <h6 class="mb-2">Resolution</h6>
@@ -644,6 +678,8 @@
           </div>
         </div>
       </div>
+      </div>
+      <!-- End Expert Settings -->
       
       <!-- Image Orientation Controls -->
       <div class="row g-3 mt-2">
@@ -687,6 +723,133 @@
               <option value="green" selected>Green Channel</option>
               <option value="blue">Blue Channel</option>
             </select>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hologram Processing Controls -->
+  <div class="controls-panel">
+    <div class="panel-header collapsed" onclick="togglePanel(this)">
+      <h4>Hologram Processing Parameters</h4>
+      <span class="panel-toggle">▼</span>
+    </div>
+    <div class="panel-content">
+      <!-- Expert Mode Toggle -->
+      <div class="expert-mode-toggle">
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" id="expertModeHologram">
+          <label class="form-check-label" for="expertModeHologram">
+            <strong>🔧 Expert Mode</strong>
+          </label>
+        </div>
+        <small class="text-muted">Show advanced hologram processing parameters</small>
+      </div>
+      
+      <div class="row g-3">
+        <div class="col-md-4">
+          <div class="slider-container">
+            <label for="dz" class="form-label">Distance (mm): <span id="dz-value">5.0</span></label>
+            <div class="d-flex align-items-center gap-2">
+              <button class="btn btn-sm btn-outline-secondary" onclick="adjustSlider('dz', -0.01)">−</button>
+              <input type="range" class="form-range" id="dz" min="0.0" max="2.0" value="0.1" step="0.02">
+              <button class="btn btn-sm btn-outline-secondary" onclick="adjustSlider('dz', 0.02)">+</button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Expert Settings for Wavelength and Pixel Size -->
+        <div class="expert-settings" id="hologram-expert-settings">
+        <div class="col-md-4">
+          <div class="slider-container">
+            <label for="wavelength" class="form-label">Wavelength (nm): <span id="wavelength-value">440</span></label>
+            <div class="d-flex align-items-center gap-2">
+              <button class="btn btn-sm btn-outline-secondary" onclick="adjustSlider('wavelength', -10)">−</button>
+              <input type="range" class="form-range" id="wavelength" min="380" max="700" value="440" step="10">
+              <button class="btn btn-sm btn-outline-secondary" onclick="adjustSlider('wavelength', 10)">+</button>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="slider-container">
+            <label for="pixelsize" class="form-label">Pixel Size (µm): <span id="pixelsize-value">1.4</span></label>
+            <div class="d-flex align-items-center gap-2">
+              <button class="btn btn-sm btn-outline-secondary" onclick="adjustSlider('pixelsize', -0.1)">−</button>
+              <input type="range" class="form-range" id="pixelsize" min="0.5" max="5.0" value="1.4" step="0.1">
+              <button class="btn btn-sm btn-outline-secondary" onclick="adjustSlider('pixelsize', 0.1)">+</button>
+            </div>
+          </div>
+        </div>
+        </div>
+        <!-- End Expert Settings -->
+      </div>
+      <div class="row">
+        <div class="col-auto">
+          <button id="toggleProcessing" class="btn btn-info">Enable Processing</button>
+          <button id="processFrame" class="btn btn-secondary">Process Current Frame</button>
+          <button id="toggleDebug" class="btn btn-outline-warning">Enable Debug</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- WiFi Management -->
+  <div class="controls-panel">
+    <div id="wifi-management-header" class="panel-header collapsed">
+      <h4>WiFi Management</h4>
+      <span class="panel-toggle">▼</span>
+    </div>
+    <div class="panel-content">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <div class="card">
+            <div class="card-header">
+              <h6 class="mb-0">Connection Status</h6>
+            </div>
+            <div class="card-body">
+              <div id="wifi-status">
+                <small class="text-muted">Loading...</small>
+              </div>
+              <button id="refreshStatus" class="btn btn-sm btn-outline-primary mt-2">Refresh Status</button>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card">
+            <div class="card-header">
+              <h6 class="mb-0">Network Configuration</h6>
+            </div>
+            <div class="card-body">
+              <button id="scanNetworks" class="btn btn-sm btn-primary mb-2">Scan Networks</button>
+              <button id="enableAP" class="btn btn-sm btn-warning mb-2">Enable Access Point</button>
+              <div id="network-list" class="mt-2" style="max-height: 200px; overflow-y: auto;">
+                <small class="text-muted">Click "Scan Networks" to see available WiFi networks</small>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="row g-3 mt-2">
+        <div class="col-12">
+          <div class="card">
+            <div class="card-header">
+              <h6 class="mb-0">Connect to Network</h6>
+            </div>
+            <div class="card-body">
+              <div class="row g-2">
+                <div class="col-md-4">
+                  <input type="text" id="wifi-ssid" class="form-control" placeholder="Network Name (SSID)">
+                </div>
+                <div class="col-md-4">
+                  <input type="password" id="wifi-password" class="form-control" placeholder="Password">
+                </div>
+                <div class="col-md-4">
+                  <button id="connectWifi" class="btn btn-success w-100">Connect</button>
+                </div>
+              </div>
+              <small class="text-muted">Note: Connecting to a network will require a reboot to take effect.</small>
+            </div>
           </div>
         </div>
       </div>
@@ -760,7 +923,31 @@
       <span class="panel-toggle">▼</span>
     </div>
     <div class="panel-content">
+      <!-- Expert Mode Toggle -->
+      <div class="expert-mode-toggle">
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" id="expertModeHologram">
+          <label class="form-check-label" for="expertModeHologram">
+            <strong>🔧 Expert Mode</strong>
+          </label>
+        </div>
+        <small class="text-muted">Show advanced hologram processing parameters</small>
+      </div>
+      
       <div class="row g-3">
+        <div class="col-md-4">
+          <div class="slider-container">
+            <label for="dz" class="form-label">Distance (mm): <span id="dz-value">5.0</span></label>
+            <div class="d-flex align-items-center gap-2">
+              <button class="btn btn-sm btn-outline-secondary" onclick="adjustSlider('dz', -0.01)">−</button>
+              <input type="range" class="form-range" id="dz" min="0.0" max="2.0" value="0.1" step="0.02">
+              <button class="btn btn-sm btn-outline-secondary" onclick="adjustSlider('dz', 0.02)">+</button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Expert Settings for Wavelength and Pixel Size -->
+        <div class="expert-settings" id="hologram-expert-settings">
         <div class="col-md-4">
           <div class="slider-container">
             <label for="wavelength" class="form-label">Wavelength (nm): <span id="wavelength-value">440</span></label>
@@ -781,16 +968,8 @@
             </div>
           </div>
         </div>
-        <div class="col-md-4">
-          <div class="slider-container">
-            <label for="dz" class="form-label">Distance (mm): <span id="dz-value">5.0</span></label>
-            <div class="d-flex align-items-center gap-2">
-              <button class="btn btn-sm btn-outline-secondary" onclick="adjustSlider('dz', -0.01)">−</button>
-              <input type="range" class="form-range" id="dz" min="0.0" max="2.0" value="0.1" step="0.02">
-              <button class="btn btn-sm btn-outline-secondary" onclick="adjustSlider('dz', 0.02)">+</button>
-            </div>
-          </div>
         </div>
+        <!-- End Expert Settings -->
       </div>
       <div class="row">
         <div class="col-auto">
@@ -1200,6 +1379,41 @@ document.addEventListener('DOMContentLoaded', function() {
         // Update processing mode status periodically
         setInterval(updateProcessingModeStatus, 2000);
     }, 1000); // Wait a bit for other initialization
+});
+
+// Expert mode toggle functionality
+document.addEventListener('DOMContentLoaded', function() {
+    // Camera expert mode toggle
+    const expertModeCameraToggle = document.getElementById('expertModeCamera');
+    const cameraExpertSettings = document.getElementById('camera-expert-settings');
+    
+    if (expertModeCameraToggle && cameraExpertSettings) {
+        expertModeCameraToggle.addEventListener('change', function() {
+            if (this.checked) {
+                cameraExpertSettings.classList.add('show');
+                console.log('✅ Camera expert mode enabled');
+            } else {
+                cameraExpertSettings.classList.remove('show');
+                console.log('❌ Camera expert mode disabled');
+            }
+        });
+    }
+    
+    // Hologram expert mode toggle
+    const expertModeHologramToggle = document.getElementById('expertModeHologram');
+    const hologramExpertSettings = document.getElementById('hologram-expert-settings');
+    
+    if (expertModeHologramToggle && hologramExpertSettings) {
+        expertModeHologramToggle.addEventListener('change', function() {
+            if (this.checked) {
+                hologramExpertSettings.classList.add('show');
+                console.log('✅ Hologram expert mode enabled');
+            } else {
+                hologramExpertSettings.classList.remove('show');
+                console.log('❌ Hologram expert mode disabled');
+            }
+        });
+    }
 });
 </script>
 
