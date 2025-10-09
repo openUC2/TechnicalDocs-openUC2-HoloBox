@@ -203,7 +203,7 @@ def _capture(highRes: bool=False) -> np.ndarray:
             picam.configure(stream_config)
             picam.start()
              
-            arr = _crop_image(arr, center=(frame.shape[1] // 2, frame.shape[0] // 2), size=(640, 480))
+            arr = _crop_image(arr, center=(arr.shape[1] // 2, arr.shape[0] // 2), size=(640, 480))
 
             return arr
         else:

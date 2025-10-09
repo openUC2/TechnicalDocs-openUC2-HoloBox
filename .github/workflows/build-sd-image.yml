@@ -5,10 +5,22 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to create/use (e.g. v1.2.3). If empty, an auto tag is generated."
+        required: false
+      prerelease:
+        description: "Mark release as prerelease"
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build-sd-image:
     runs-on: ubuntu-latest
+    env:
+      IMAGE_NAME_BASE: holobox-sdcard
+
 
     steps:
     - name: Checkout
@@ -143,30 +155,38 @@ jobs:
         NM
 
         # --- Don’t let wpa_supplicant grab wlan0 while in AP mode ---
-        systemctl disable wpa_supplicant.service 2>/dev/null || true
-        systemctl mask wpa_supplicant.service 2>/dev/null || true
-        systemctl mask wpa_supplicant@wlan0.service 2>/dev/null || true
+        systemctl disable wpa_supplicant.service wpa_supplicant@wlan0.service 2>/dev/null || true
+        systemctl mask wpa_supplicant.service wpa_supplicant@wlan0.service 2>/dev/null || true
 
-        # --- SSID generator ---
-        cat <<'SSIDGEN' > /opt/holobox/generate_ssid.py
+        # --- SSID generator (runtime, MAC-based, first-boot) ---
+        install -d /etc/holobox
+        cat <<'PY' > /usr/local/bin/holobox-generate-ssid
         #!/usr/bin/env python3
-        import hashlib, os, sys
+        import hashlib, pathlib, sys
         ADJ=["Bright","Clear","Focus","Sharp","Zoom","Light","Flash","Lens","Image","Photo","Pixel","Frame","View","Scope","Beam","Wave","Crystal","Prism","Filter","Mirror","Optic","Laser","Holo","Ray","Spectrum","Digital","Micro","Macro","Ultra","Super","Nano","Mini"]
         NOUN=["Box","Cam","Lab","Scope","Lens","Beam","Wave","Light","Focus","View","Snap","Shot","Frame","Pixel","Image","Photo","Optic","Prism","Mirror","Filter","Ray","Laser","Holo","Spectrum","Micro","Macro","Unit","Device","System","Tool","Cube","Capsule","Pod"]
-        def mac(iface='wlan0'):
-            try: return open(f'/sys/class/net/{iface}/address').read().strip()
-            except: h=hashlib.md5(os.uname().nodename.encode()).hexdigest()[:12]; return ':'.join([h[i:i+2] for i in range(0,12,2)])
-        def gen(iface='wlan0'):
-            m=bytes.fromhex(mac(iface).replace(':','')); h=hashlib.sha256(m).digest()
-            return f"openUC2-{ADJ[((h[0]<<8)|h[1])%len(ADJ)]}-{NOUN[((h[2]<<8)|h[3])%len(NOUN)]}"
-        if __name__=='__main__': print(gen(sys.argv[1] if len(sys.argv)>1 else 'wlan0'))
-        SSIDGEN
-        chmod +x /opt/holobox/generate_ssid.py
-        SSID="$(/opt/holobox/generate_ssid.py wlan0 || echo openUC2-$(hostname | tail -c 5))"
-        PASSPHRASE="holobox123"
+        def mac(path='/sys/class/net/wlan0/address'):
+            return pathlib.Path(path).read_text().strip()
+        m = bytes.fromhex(mac().replace(':',''))
+        h = hashlib.sha256(m).digest()
+        ssid = f"openUC2-{ADJ[((h[0]<<8)|h[1])%len(ADJ)]}-{NOUN[((h[2]<<8)|h[3])%len(NOUN)]}"
+        print(ssid)
+        PY
+        chmod +x /usr/local/bin/holobox-generate-ssid
 
-        # --- hostapd ---
-        mkdir -p /etc/hostapd
+        # Write hostapd.conf at first boot with MAC-based SSID
+        cat > /usr/local/bin/holobox-configure-ap <<'AP'
+        #!/bin/bash
+        set -e
+        PASSPHRASE="holobox123"
+        SSID_FILE="/etc/holobox/ssid"
+        if [ ! -s "$SSID_FILE" ]; then
+          SSID="$(/usr/local/bin/holobox-generate-ssid)"
+          echo "$SSID" > "$SSID_FILE"
+        else
+          SSID="$(cat "$SSID_FILE")"
+        fi
+        install -d /etc/hostapd
         cat > /etc/hostapd/hostapd.conf <<EOF
         interface=wlan0
         driver=nl80211
@@ -187,6 +207,8 @@ jobs:
         ieee80211n=1
         EOF
         echo 'DAEMON_CONF="/etc/hostapd/hostapd.conf"' > /etc/default/hostapd
+        AP
+        chmod +x /usr/local/bin/holobox-configure-ap
 
         # --- dnsmasq ---
         mkdir -p /etc/dnsmasq.d
@@ -201,9 +223,8 @@ jobs:
         server=8.8.4.4
         DNS
 
-        # --- IP forwarding + nftables NAT (no firewall commands at build time) ---
+        # --- IP forwarding + nftables NAT ---
         echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-holobox-ipforward.conf
-
         cat > /etc/nftables.conf <<'NFT'
         flush ruleset
         table inet filter {
@@ -222,6 +243,7 @@ jobs:
         }
         NFT
         systemctl enable nftables
+
 
         # --- Prepare wlan0 before hostapd/dnsmasq on boot ---
         cat > /etc/systemd/system/holobox-hotspot.service <<'HOTSPOT'
@@ -297,3 +319,32 @@ jobs:
         name: holobox-sdcard-image
         path: holobox-sdcard-*.img.zip
         retention-days: 30
+
+    # Compute the release tag for both tag-push and workflow_dispatch
+    - name: Compute tag
+      id: tag
+      shell: bash
+      run: |
+        if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+          TAG="${GITHUB_REF#refs/tags/}"
+        elif [[ -n "${{ github.event.inputs.tag }}" ]]; then
+          TAG="${{ github.event.inputs.tag }}"
+        else
+          TAG="v$(date +%Y%m%d)-${GITHUB_RUN_NUMBER}"
+        fi
+        echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+        echo "TAG=$TAG" >> "$GITHUB_ENV"
+
+    # Create or update the GitHub Release and upload asset
+    - name: Release (create/update and upload asset)
+      uses: ncipollo/release-action@v1
+      with:
+        tag: ${{ steps.tag.outputs.tag }}
+        name: HoloBox ${{ steps.tag.outputs.tag }}
+        body: HoloBox SD Card Image
+        prerelease: ${{ github.event.inputs.prerelease || false }}
+        allowUpdates: true
+        replacesArtifacts: false
+        artifacts: "holobox-sdcard-*.img.zip"
+        artifactContentType: application/zip
+        token: ${{ secrets.GITHUB_TOKEN }}
