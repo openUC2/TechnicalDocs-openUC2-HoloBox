@@ -92,17 +92,33 @@ jobs:
         # This allows the camera API to bind to ports 80/443 without sudo
         apt-get install -y libcap2-bin
         setcap 'cap_net_bind_service=+ep' /usr/bin/python3.11 || echo "Warning: Could not set capability for Python"
+        
+        # Configure auto-login for getty on tty1
         mkdir -p /etc/systemd/system/getty@tty1.service.d
         cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf << 'AUTOLOGIN'
         [Service]
         ExecStart=
         ExecStart=-/sbin/agetty --autologin pi --noclear %I $TERM
         AUTOLOGIN
+        
+        # Configure auto-login for serial console (optional but good for debugging)
+        mkdir -p /etc/systemd/system/serial-getty@ttyS0.service.d
+        cat > /etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf << 'SERIALAUTOLOGIN'
+        [Service]
+        ExecStart=
+        ExecStart=-/sbin/agetty --autologin pi --noclear %I 115200,38400,9600 vt102
+        SERIALAUTOLOGIN
+        
+        # Disable and mask the first-boot user configuration wizards
         systemctl disable userconfig.service 2>/dev/null || true
         systemctl mask userconfig.service 2>/dev/null || true
         systemctl disable piwiz.service 2>/dev/null || true
         systemctl mask piwiz.service 2>/dev/null || true
+        
+        # Enable SSH
         touch /boot/firmware/ssh
+        
+        # Set up user credentials for first boot (Bookworm requirement)
         echo "pi:\$6\$rounds=656000\$YQKNpEXgsKpKhJoY\$u2LpKU3xd5JchlREtd/qXhBUOEIgM/gDp0tOk3gGnfEh76VjZcB6g7wXP2.7v3vA.T8u6pzOgKaFEaVZQMdtX0" > /boot/firmware/userconf.txt
 
         # --- App install ---
@@ -153,6 +169,15 @@ jobs:
         [keyfile]
         unmanaged-devices=interface-name:wlan0
         NM
+        
+        # Also create the main NetworkManager config to ensure it doesn't interfere
+        cat > /etc/NetworkManager/NetworkManager.conf << 'NMCONF'
+        [main]
+        plugins=ifupdown,keyfile
+        
+        [ifupdown]
+        managed=false
+        NMCONF
 
         # --- Don’t let wpa_supplicant grab wlan0 while in AP mode ---
         systemctl disable wpa_supplicant.service wpa_supplicant@wlan0.service 2>/dev/null || true
@@ -178,14 +203,39 @@ jobs:
         cat > /usr/local/bin/holobox-configure-ap <<'AP'
         #!/bin/bash
         set -e
+        
+        # Log to syslog for debugging
+        exec 1> >(logger -s -t holobox-configure-ap) 2>&1
+        
+        echo "Starting HoloBox AP configuration..."
+        
         PASSPHRASE="holobox123"
         SSID_FILE="/etc/holobox/ssid"
+        
+        # Wait for wlan0 to be available
+        for i in {1..10}; do
+          if [ -e /sys/class/net/wlan0/address ]; then
+            echo "wlan0 interface found"
+            break
+          fi
+          echo "Waiting for wlan0... attempt $i/10"
+          sleep 1
+        done
+        
+        if [ ! -e /sys/class/net/wlan0/address ]; then
+          echo "ERROR: wlan0 not found after 10 seconds"
+          exit 1
+        fi
+        
         if [ ! -s "$SSID_FILE" ]; then
           SSID="$(/usr/local/bin/holobox-generate-ssid)"
+          echo "Generated new SSID: $SSID"
           echo "$SSID" > "$SSID_FILE"
         else
           SSID="$(cat "$SSID_FILE")"
+          echo "Using existing SSID: $SSID"
         fi
+        
         install -d /etc/hostapd
         cat > /etc/hostapd/hostapd.conf <<EOF
         interface=wlan0
@@ -206,7 +256,12 @@ jobs:
         ieee80211d=1
         ieee80211n=1
         EOF
+        
         echo 'DAEMON_CONF="/etc/hostapd/hostapd.conf"' > /etc/default/hostapd
+        
+        echo "HoloBox AP configuration completed successfully"
+        echo "SSID: $SSID"
+        echo "Password: $PASSPHRASE"
         AP
         chmod +x /usr/local/bin/holobox-configure-ap
 
@@ -249,19 +304,21 @@ jobs:
         cat > /etc/systemd/system/holobox-hotspot.service <<'HOTSPOT'
         [Unit]
         Description=Prepare wlan0 for HoloBox AP
-        After=NetworkManager.service network-online.target
-        Wants=NetworkManager.service
+        After=network-online.target
+        Wants=network-online.target
         Before=hostapd.service dnsmasq.service
         [Service]
         Type=oneshot
         RemainAfterExit=yes
         ExecStart=/bin/bash -c 'rfkill unblock all || true'
+        ExecStart=/bin/bash -c 'sleep 2'
         ExecStart=/bin/bash -c 'nmcli dev set wlan0 managed no 2>/dev/null || true'
-        ExecStart=/bin/sleep 4
+        ExecStart=/bin/bash -c 'sleep 1'
         ExecStart=/bin/bash -c 'ip link set wlan0 down || true'
         ExecStart=/bin/bash -c 'ip addr flush dev wlan0 || true'
         ExecStart=/bin/bash -c 'ip addr add 192.168.4.1/24 dev wlan0 || true'
         ExecStart=/bin/bash -c 'ip link set wlan0 up || true'
+        ExecStart=/usr/local/bin/holobox-configure-ap
         [Install]
         WantedBy=multi-user.target
         HOTSPOT
@@ -272,15 +329,53 @@ jobs:
         # --- Info helper ---
         cat <<'INFO' > /usr/local/bin/holobox-info
         #!/bin/bash
-        echo "HoloBox System Information"
-        echo "=========================="
-        systemctl is-active hostapd && echo "hostapd: active" || echo "hostapd: inactive"
-        systemctl is-active dnsmasq && echo "dnsmasq: active" || echo "dnsmasq: inactive"
-        systemctl is-active nftables && echo "nftables: active" || echo "nftables: inactive"
-        ip addr show wlan0 2>/dev/null | sed -n 's/^\s*inet\s\+\([0-9.\/]\+\).*/wlan0 IP: \1/p'
-        iw dev wlan0 info 2>/dev/null | sed -n 's/^\s\+ssid\ \+\(.*\)$/SSID: \1/p'
+        echo "╔══════════════════════════════════════════╗"
+        echo "║         HoloBox System Information       ║"
+        echo "╚══════════════════════════════════════════╝"
+        echo ""
+        echo "Services Status:"
+        systemctl is-active hostapd >/dev/null 2>&1 && echo "  ✓ hostapd: active" || echo "  ✗ hostapd: inactive"
+        systemctl is-active dnsmasq >/dev/null 2>&1 && echo "  ✓ dnsmasq: active" || echo "  ✗ dnsmasq: inactive"
+        systemctl is-active nftables >/dev/null 2>&1 && echo "  ✓ nftables: active" || echo "  ✗ nftables: inactive"
+        systemctl is-active holobox-camera >/dev/null 2>&1 && echo "  ✓ holobox-camera: active" || echo "  ✗ holobox-camera: inactive"
+        systemctl is-active holobox-hotspot >/dev/null 2>&1 && echo "  ✓ holobox-hotspot: active" || echo "  ✗ holobox-hotspot: inactive"
+        echo ""
+        echo "Network Configuration:"
+        if [ -e /sys/class/net/wlan0/address ]; then
+          WLAN_IP=$(ip addr show wlan0 2>/dev/null | sed -n 's/^\s*inet\s\+\([0-9.\/]\+\).*/\1/p')
+          [ -n "$WLAN_IP" ] && echo "  wlan0 IP: $WLAN_IP" || echo "  wlan0 IP: not configured"
+          SSID=$(iw dev wlan0 info 2>/dev/null | sed -n 's/^\s\+ssid\s\+\(.*\)$/\1/p')
+          [ -n "$SSID" ] && echo "  SSID: $SSID" || echo "  SSID: not broadcasting"
+        else
+          echo "  wlan0: not available"
+        fi
+        
+        if [ -f /etc/holobox/ssid ]; then
+          echo "  Configured SSID: $(cat /etc/holobox/ssid)"
+          echo "  WiFi Password: holobox123"
+        fi
+        
+        echo ""
+        echo "Access Information:"
+        echo "  Web Interface: http://192.168.4.1/"
+        echo "  Camera API: http://192.168.4.1:80/"
+        echo ""
+        echo "Troubleshooting:"
+        echo "  View logs: sudo journalctl -u holobox-hotspot -u hostapd -u dnsmasq"
+        echo "  Restart AP: sudo systemctl restart holobox-hotspot hostapd dnsmasq"
+        echo ""
         INFO
         chmod +x /usr/local/bin/holobox-info
+        
+        # Add info display to user's bashrc
+        cat >> /home/pi/.bashrc <<'BASHRC'
+        
+        # Display HoloBox info on login
+        if [ -x /usr/local/bin/holobox-info ]; then
+          /usr/local/bin/holobox-info
+        fi
+        BASHRC
+        chown pi:pi /home/pi/.bashrc
 
         systemctl daemon-reload
         CHROOT
