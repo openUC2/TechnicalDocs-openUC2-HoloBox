@@ -188,8 +188,8 @@ jobs:
         cat <<'PY' > /usr/local/bin/holobox-generate-ssid
         #!/usr/bin/env python3
         import hashlib, pathlib, sys
-        ADJ=["Bright","Clear","Focus","Sharp","Zoom","Light","Flash","Lens","Image","Photo","Pixel","Frame","View","Scope","Beam","Wave","Crystal","Prism","Filter","Mirror","Optic","Laser","Holo","Ray","Spectrum","Digital","Micro","Macro","Ultra","Super","Nano","Mini"]
-        NOUN=["Box","Cam","Lab","Scope","Lens","Beam","Wave","Light","Focus","View","Snap","Shot","Frame","Pixel","Image","Photo","Optic","Prism","Mirror","Filter","Ray","Laser","Holo","Spectrum","Micro","Macro","Unit","Device","System","Tool","Cube","Capsule","Pod"]
+        ADJ=["Bright","Clear","Focus","Sharp","Zoom","Light","Flash","Lens","Image","Photo","Pixel","Frame","View","Scope","Beam","Wave","Crystal","Prism","Filter","Mirror","Optic","Laser","Holo","Ray","Spectrum","Digital","Micro","Macro","Ultra","Super","Nano"]
+        NOUN=["Box","Cam","Lab","Scope","Lens","Beam","Wave","Light","Focus","View","Snap","Shot","Pixel","Image","Photo","Optic","Prism","Mirror","Filter","Ray","Laser","Holo","Spectrum","Micro","Macro","Unit","Device","System","Tool","Cube","Capsule","Pod"]
         def mac(path='/sys/class/net/wlan0/address'):
             return pathlib.Path(path).read_text().strip()
         m = bytes.fromhex(mac().replace(':',''))
@@ -227,15 +227,20 @@ jobs:
           exit 1
         fi
         
+        # CRITICAL: Always regenerate SSID if file doesn't exist or is empty
+        # This ensures each device gets a unique SSID based on its MAC address
         if [ ! -s "$SSID_FILE" ]; then
           SSID="$(/usr/local/bin/holobox-generate-ssid)"
-          echo "Generated new SSID: $SSID"
+          echo "Generated new SSID based on MAC address: $SSID"
+          install -d /etc/holobox
           echo "$SSID" > "$SSID_FILE"
+          chmod 644 "$SSID_FILE"
         else
           SSID="$(cat "$SSID_FILE")"
-          echo "Using existing SSID: $SSID"
+          echo "Using existing SSID from cache: $SSID"
         fi
         
+        # Always regenerate hostapd.conf to ensure it uses the correct SSID
         install -d /etc/hostapd
         cat > /etc/hostapd/hostapd.conf <<EOF
         interface=wlan0
@@ -262,8 +267,13 @@ jobs:
         echo "HoloBox AP configuration completed successfully"
         echo "SSID: $SSID"
         echo "Password: $PASSPHRASE"
+        echo "MAC Address: $(cat /sys/class/net/wlan0/address)"
         AP
         chmod +x /usr/local/bin/holobox-configure-ap
+        
+        # IMPORTANT: Do NOT create /etc/holobox/ssid during image build!
+        # It must be created on first boot on the actual device to ensure uniqueness
+        # Each Raspberry Pi will generate its own unique SSID based on its MAC address
 
         # --- dnsmasq ---
         mkdir -p /etc/dnsmasq.d

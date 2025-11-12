@@ -150,12 +150,13 @@ const startStream = () => {
     }
     
     const stream = document.getElementById('stream');
-    // Use the more compatible MJPEG stream endpoint
-    stream.src = baseUrl + '/api/stream.mjpg';
+    // Use optimized stream with quality and fps parameters
+    // quality=60 for good balance, fps=20 for smooth streaming
+    stream.src = baseUrl + '/stream?quality=60&fps=20';
     
     // Add timestamp to prevent caching issues on mobile
     const timestamp = new Date().getTime();
-    stream.src += '?t=' + timestamp;
+    stream.src += '&t=' + timestamp;
     
     stream.onload = () => {
         updateStreamAspectRatio();

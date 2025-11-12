@@ -784,7 +784,23 @@
         </div>
         <!-- End Expert Settings -->
       </div>
-      <div class="row">
+      
+      <!-- Processing Speed Control -->
+      <div class="row g-3 mt-2">
+        <div class="col-md-6">
+          <div class="slider-container">
+            <label for="processingFps" class="form-label">Processing Rate: <span id="processingFps-value">1</span> FPS</label>
+            <div class="d-flex align-items-center gap-2">
+              <button class="btn btn-sm btn-outline-secondary" onclick="adjustSlider('processingFps', -0.5)">−</button>
+              <input type="range" class="form-range" id="processingFps" min="0.5" max="5" value="1" step="0.5">
+              <button class="btn btn-sm btn-outline-secondary" onclick="adjustSlider('processingFps', 0.5)">+</button>
+            </div>
+            <small class="text-muted">Lower FPS = less CPU usage, smoother camera stream</small>
+          </div>
+        </div>
+      </div>
+      
+      <div class="row mt-2">
         <div class="col-auto">
           <button id="toggleProcessing" class="btn btn-info">Enable Processing</button>
           <button id="processFrame" class="btn btn-secondary">Process Current Frame</button>
@@ -971,7 +987,23 @@
         </div>
         <!-- End Expert Settings -->
       </div>
-      <div class="row">
+      
+      <!-- Processing Speed Control -->
+      <div class="row g-3 mt-2">
+        <div class="col-md-6">
+          <div class="slider-container">
+            <label for="processingFps" class="form-label">Processing Rate: <span id="processingFps-value">1</span> FPS</label>
+            <div class="d-flex align-items-center gap-2">
+              <button class="btn btn-sm btn-outline-secondary" onclick="adjustSlider('processingFps', -0.5)">−</button>
+              <input type="range" class="form-range" id="processingFps" min="0.5" max="5" value="1" step="0.5">
+              <button class="btn btn-sm btn-outline-secondary" onclick="adjustSlider('processingFps', 0.5)">+</button>
+            </div>
+            <small class="text-muted">Lower FPS = less CPU usage, smoother camera stream</small>
+          </div>
+        </div>
+      </div>
+      
+      <div class="row mt-2">
         <div class="col-auto">
           <button id="toggleProcessing" class="btn btn-info">Enable Processing</button>
           <button id="processFrame" class="btn btn-secondary">Process Current Frame</button>
@@ -1122,6 +1154,9 @@ function updateProcessingModeStatus() {
         let mode = 'Unknown';
         let color = 'secondary';
         
+        // Check if PyScript is ready (set by py:ready event)
+        const isPyScriptReady = window.pyScriptReady === true;
+        
         if (forceFallbackMode) {
             if (typeof cv !== 'undefined') {
                 mode = 'JavaScript Fallback + OpenCV.js (Forced)';
@@ -1130,6 +1165,9 @@ function updateProcessingModeStatus() {
                 mode = 'JavaScript Fallback (Forced)';
                 color = 'warning';
             }
+        } else if (isPyScriptReady) {
+            mode = 'PyScript/Pyodide';
+            color = 'success';
         } else if (window.pyScriptFallbackLoader?.isFallbackMode) {
             if (typeof cv !== 'undefined') {
                 mode = 'JavaScript Fallback + OpenCV.js (Auto)';
@@ -1138,9 +1176,6 @@ function updateProcessingModeStatus() {
                 mode = 'JavaScript Fallback (Auto)';
                 color = 'info';
             }
-        } else if (typeof pyscript !== 'undefined' || typeof pyodide !== 'undefined') {
-            mode = 'PyScript/Pyodide';
-            color = 'success';
         } else {
             mode = 'Loading...';
             color = 'secondary';
@@ -1149,12 +1184,6 @@ function updateProcessingModeStatus() {
         statusElement.textContent = mode;
         statusElement.parentElement.className = `alert alert-${color}`;
         currentProcessingMode = mode;
-        
-        // Log current state for debugging
-        console.log(`🔧 Processing mode: ${mode}`);
-        console.log(`🔧 OpenCV available: ${typeof cv !== 'undefined'}`);
-        console.log(`🔧 PyScript available: ${typeof pyscript !== 'undefined'}`);
-        console.log(`🔧 Fallback loader active: ${window.pyScriptFallbackLoader?.isFallbackMode}`);
     }
 }
 
@@ -1376,10 +1405,103 @@ function initializeOpenCVProcessor() {
 document.addEventListener('DOMContentLoaded', function() {
     setTimeout(() => {
         initializeDebugControls();
-        // Update processing mode status periodically
-        setInterval(updateProcessingModeStatus, 2000);
+        // Update processing mode status once on load only - no periodic updates needed
+        updateProcessingModeStatus();
+        // Initialize sliders
+        initializeSliders();
     }, 1000); // Wait a bit for other initialization
 });
+
+// Slider adjustment function (global)
+window.adjustSlider = function(sliderId, delta) {
+    const slider = document.getElementById(sliderId);
+    const valueDisplay = document.getElementById(sliderId + '-value');
+    
+    if (slider && valueDisplay) {
+        const currentValue = parseFloat(slider.value);
+        const step = parseFloat(slider.step) || 1;
+        const min = parseFloat(slider.min);
+        const max = parseFloat(slider.max);
+        
+        // Calculate new value
+        let newValue = currentValue + delta;
+        
+        // Clamp to min/max
+        newValue = Math.max(min, Math.min(max, newValue));
+        
+        // Round to step precision
+        newValue = Math.round(newValue / step) * step;
+        
+        // Update slider and display
+        slider.value = newValue;
+        
+        // Format display based on slider type
+        if (sliderId === 'wavelength') {
+            valueDisplay.textContent = Math.round(newValue);
+        } else if (sliderId === 'processingFps') {
+            valueDisplay.textContent = newValue.toFixed(1);
+        } else {
+            valueDisplay.textContent = newValue.toFixed(2);
+        }
+        
+        // Trigger input event for processing
+        slider.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+};
+
+// Initialize all sliders with event listeners
+function initializeSliders() {
+    // Processing FPS slider
+    const processingFpsSlider = document.getElementById('processingFps');
+    const processingFpsValue = document.getElementById('processingFps-value');
+    
+    if (processingFpsSlider && processingFpsValue) {
+        processingFpsSlider.addEventListener('input', function() {
+            const fps = parseFloat(this.value);
+            processingFpsValue.textContent = fps.toFixed(1);
+            
+            // Update processing interval in hologram_processing.py
+            if (window.update_processing_interval) {
+                const intervalMs = Math.round(1000 / fps);
+                window.update_processing_interval(intervalMs);
+                console.log(`⚙️ Processing interval updated to ${intervalMs}ms (${fps} FPS)`);
+            }
+        });
+        
+        // Set initial value
+        processingFpsValue.textContent = processingFpsSlider.value;
+    }
+    
+    // Distance (dz) slider
+    const dzSlider = document.getElementById('dz');
+    const dzValue = document.getElementById('dz-value');
+    
+    if (dzSlider && dzValue) {
+        dzSlider.addEventListener('input', function() {
+            dzValue.textContent = parseFloat(this.value).toFixed(2);
+        });
+    }
+    
+    // Wavelength slider
+    const wavelengthSlider = document.getElementById('wavelength');
+    const wavelengthValue = document.getElementById('wavelength-value');
+    
+    if (wavelengthSlider && wavelengthValue) {
+        wavelengthSlider.addEventListener('input', function() {
+            wavelengthValue.textContent = Math.round(parseFloat(this.value));
+        });
+    }
+    
+    // Pixel size slider
+    const pixelsizeSlider = document.getElementById('pixelsize');
+    const pixelsizeValue = document.getElementById('pixelsize-value');
+    
+    if (pixelsizeSlider && pixelsizeValue) {
+        pixelsizeSlider.addEventListener('input', function() {
+            pixelsizeValue.textContent = parseFloat(this.value).toFixed(2);
+        });
+    }
+}
 
 // Expert mode toggle functionality
 document.addEventListener('DOMContentLoaded', function() {

@@ -168,6 +168,52 @@ sudo systemctl status holobox-camera.service  # Check service status
 sudo tail -f /var/log/holobox/camera.log      # View logs
 ```
 
+
+```bash
+pi@raspberrypi:~ $ sudo systemctl status holobox-camera.service 
+○ holobox-camera.service - HoloBox Camera API Server
+     Loaded: loaded (/etc/systemd/system/holobox-camera.service; enabled; preset: enabled)
+     Active: inactive (dead) since Tue 2025-11-11 07:12:29 GMT; 17min ago
+   Duration: 5min 24.908s
+    Process: 607 ExecStart=/usr/bin/python3 /opt/holobox/streamlined_camera_api.py --host 0.0.0.0 --port 80 --no-ssl (code=killed, signal=TERM)
+   Main PID: 607 (code=killed, signal=TERM)
+        CPU: 1min 43.072s
+
+Nov 11 07:07:04 raspberrypi systemd[1]: Started holobox-camera.service - HoloBox Camera API Server.
+Nov 11 07:12:29 raspberrypi systemd[1]: Stopping holobox-camera.service - HoloBox Camera API Server...
+Nov 11 07:12:29 raspberrypi systemd[1]: holobox-camera.service: Deactivated successfully.
+Nov 11 07:12:29 raspberrypi systemd[1]: Stopped holobox-camera.service - HoloBox Camera API Server.
+Nov 11 07:12:29 raspberrypi systemd[1]: holobox-camera.service: Consumed 1min 43.072s CPU time.
+```
+
+```bash
+pi@raspberrypi:~ $ holobox-info
+╔══════════════════════════════════════════╗
+║         HoloBox System Information       ║
+╚══════════════════════════════════════════╝
+
+Services Status:
+  ✓ hostapd: active
+  ✓ dnsmasq: active
+  ✓ nftables: active
+  ✗ holobox-camera: inactive
+  ✓ holobox-hotspot: active
+
+Network Configuration:
+  wlan0 IP: 192.168.4.1/24
+  SSID: openUC2-Mini-Frame
+  Configured SSID: openUC2-Mini-Frame
+  WiFi Password: holobox123
+
+Access Information:
+  Web Interface: http://192.168.4.1/
+  Camera API: http://192.168.4.1:80/
+
+Troubleshooting:
+  View logs: sudo journalctl -u holobox-hotspot -u hostapd -u dnsmasq
+  Restart AP: sudo systemctl restart holobox-hotspot hostapd dnsmasq
+```
+
 ### 
 
 ```
@@ -175,6 +221,10 @@ service holobox-camera status
 sudo systemctl stop holobox-camera.service
 ```
 
+
+```
+mv /opt/holobox/streamlined_camera_api.py /opt/holobox/streamlined_camera_api.py_
+nano /opt/holobox/streamlined_camera_api.py
 
 ### Detect if camera is available 
 

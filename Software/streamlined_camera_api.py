@@ -19,13 +19,18 @@ import uvicorn
 import os
 import subprocess
 import sys
+import threading
 
 # Mock picamera2 for development/testing environments
 try:
     from picamera2 import Picamera2
     CAMERA_AVAILABLE = True
     picam = Picamera2()
-    picam.configure(picam.create_video_configuration(main={"size": (640, 480)}))
+    # Configure camera for RGB format (3 channels) instead of RGBA (4 channels)
+    # This reduces bandwidth by 25%
+    picam.configure(picam.create_video_configuration(
+        main={"size": (640, 480), "format": "RGB888"}
+    ))
     picam.start()    
 except Exception as e:
     print(f"Warning: picamera2 not available, using mock camera. Error: {e}")
@@ -45,7 +50,8 @@ except Exception as e:
             pass
             
         def capture_request(self):
-            return MockRequest()
+            self.frame_counter += 1
+            return MockRequest(name="main", frame_counter=self.frame_counter)
             
         def set_controls(self, controls):
             print(f"Mock: Setting controls {controls}")
@@ -54,11 +60,19 @@ except Exception as e:
             return {"ExposureTime": 10000, "AnalogueGain": 1.0}
     
     class MockRequest:
+        def __init__(self, name, frame_counter):
+            self.name = name
+            self.frame_counter = frame_counter
+
         def make_array(self, name):
             # Create a mock camera frame with some pattern
             frame = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
             # Add some pattern for testing
             cv2.rectangle(frame, (320, 240), (370, 290), (255, 255, 255), -1)
+            # add frame number to image 
+            cv2.putText(frame, f"Frame {self.frame_counter}", (10, 30), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            self.frame_counter += 1
             return frame
             
         def release(self):
@@ -66,7 +80,13 @@ except Exception as e:
     
     picam = MockPicamera2()
 
-app = FastAPI(title="Streamlined Camera API", description="Camera streaming and processing API")
+app = FastAPI(
+    title="Streamlined Camera API", 
+    description="Camera streaming and processing API",
+    docs_url="/docs",  # Swagger UI
+    redoc_url="/redoc",  # ReDoc alternative
+    openapi_url="/openapi.json"  # OpenAPI schema
+)
 
 # Add CORS middleware to allow cross-origin requests
 app.add_middleware(
@@ -91,6 +111,9 @@ camera_state = {
     "streaming": False,
     "stream_config": None  # Store streaming configuration
 }
+
+# Lock to prevent camera reconfiguration during streaming
+camera_lock = threading.Lock()
 
 # Serve static files
 static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
@@ -180,39 +203,68 @@ class WiFiConfig(BaseModel):
 
 # Utility functions
 def _capture(highRes: bool=False) -> np.ndarray:
-    """Capture a frame from the camera"""
+    """Capture a frame from the camera
+    
+    Args:
+        highRes: If True, temporarily switch to high resolution (WARNING: interrupts stream!)
+    
+    Returns:
+        RGB numpy array (height, width, 3)
+    """
     if CAMERA_AVAILABLE:
         if highRes:
-            # Store current streaming configuration
-            current_res = camera_state["resolution"]
-            stream_config = picam.create_video_configuration(main={"size": (current_res["width"], current_res["height"])})
+            # High-res capture requires camera reconfiguration - only use when streaming is stopped
+            if camera_state["streaming"]:
+                print("⚠️ WARNING: High-res capture requested while streaming - returning low-res instead to avoid stream interruption")
+                # Return low-res capture instead to avoid interrupting stream
+                with camera_lock:
+                    req = picam.capture_request()
+                    arr = req.make_array("main")
+                    req.release()
+                    print(f"Return low-res image with dimensions: {arr.shape}")
+                    return arr
             
-            # Switch to high resolution (e.g., 1920x1080 or max available)
-            high_res_config = picam.create_video_configuration(main={"size": (1920, 1080)})
-            picam.stop()
-            picam.configure(high_res_config)
-            picam.start()
-            
-            # Capture high resolution frame
-            req = picam.capture_request()
-            arr = req.make_array("main")
-            req.release()
-            
-            # Restore streaming configuration immediately
-            picam.stop()
-            picam.configure(stream_config)
-            picam.start()
-             
-            arr = _crop_image(arr, center=(arr.shape[1] // 2, arr.shape[0] // 2), size=(640, 480))
-
-            return arr
+            # Only do high-res reconfiguration when NOT streaming
+            with camera_lock:
+                # Store current configuration
+                current_res = camera_state["resolution"]
+                print(f"Capturing high-res frame (current res: {current_res})")
+                stream_config = picam.create_video_configuration(
+                    main={"size": (current_res["width"], current_res["height"]), "format": "RGB888"}
+                )
+                
+                # Switch to high resolution with RGB format
+                high_res_config = picam.create_video_configuration(
+                    main={"size": (1920, 1080), "format": "RGB888"}
+                )
+                picam.stop()
+                picam.configure(high_res_config)
+                picam.start()
+                
+                # Capture high resolution frame
+                req = picam.capture_request()
+                arr = req.make_array("main")
+                req.release()
+                
+                # Restore original configuration immediately
+                picam.stop()
+                picam.configure(stream_config)
+                picam.start()
+                
+                # Crop to target size (640x480)
+                arr = _crop_image(arr, center=(arr.shape[1] // 2, arr.shape[0] // 2), size=(640, 480))
+                print(f"Return high-res cropped image with dimensions: {arr.shape}")
+                return arr
         else:
-            # Normal capture at current resolution
-            req = picam.capture_request()
-            arr = req.make_array("main")
-            req.release()
-            return arr
+            # Normal low-res capture - safe during streaming
+            with camera_lock:
+                req = picam.capture_request()
+                arr = req.make_array("main")
+                req.release()
+                print(f"Return low-res image with dimensions: {arr.shape}")
+                return arr
     else:
+        # Mock camera for testing
         if highRes:
             print("Mock: High resolution capture requested, using simulated high-res frame.")
             # Create larger mock frame for high resolution
@@ -221,7 +273,10 @@ def _capture(highRes: bool=False) -> np.ndarray:
             frame = _crop_image(frame, center=(frame.shape[1] // 2, frame.shape[0] // 2), size=(640, 480))
             return frame
         else:
-            return picam.capture_request().make_array("main")
+            # Mock low-res capture
+            frame = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
+            cv2.rectangle(frame, (320, 240), (370, 290), (255, 255, 255), -1)
+            return frame
 
 def _crop_image(img: np.ndarray, center: tuple[int, int], size: tuple[int, int]) -> np.ndarray:
     """Crop image around center to specified size"""
@@ -240,9 +295,16 @@ def _restore_stream_config():
         picam.configure(camera_state["stream_config"])
         picam.start()
 
-def _jpeg(frame: np.ndarray) -> bytes:
-    """Encode frame as JPEG"""
-    ok, buf = cv2.imencode(".jpg", frame)
+def _jpeg(frame: np.ndarray, quality: int = 75) -> bytes:
+    """Encode frame as JPEG with configurable quality
+    
+    Args:
+        frame: Input image array
+        quality: JPEG quality (1-100). Lower = smaller file, faster streaming.
+                 75 is good balance for streaming, 85-95 for snapshots.
+    """
+    encode_params = [cv2.IMWRITE_JPEG_QUALITY, quality]
+    ok, buf = cv2.imencode(".jpg", frame, encode_params)
     if not ok:
         raise RuntimeError("JPEG encode failed")
     return buf.tobytes()
@@ -263,36 +325,76 @@ def favicon():
 @app.get("/snapshot", summary="Single JPEG frame")
 def snapshot(isHighRes: bool = False) -> Response:
     """Get a single JPEG image from the camera"""
-    img = _jpeg(_capture(highRes=isHighRes))
+    # Use higher quality (85) for snapshots
+    img = _jpeg(_capture(highRes=isHighRes), quality=85)
     return Response(content=img, media_type="image/jpeg")
 
 @app.get("/snapshot/highres", summary="High resolution JPEG frame")
 def snapshot_highres() -> Response:
     """Get a high resolution JPEG image from the camera"""
-    img = _jpeg(_capture(highRes=True))
+    # Use high quality (90) for high-res snapshots
+    img = _jpeg(_capture(highRes=True), quality=90)
     return Response(content=img, media_type="image/jpeg")
 
 @app.get("/stream", summary="MJPEG stream")
-def stream():
-    """Get continuous MJPEG stream"""
+def stream(quality: int = 60, fps: int = 20):
+    """Get continuous MJPEG stream with optimized settings
+    
+    Args:
+        quality: JPEG quality (30-95). Lower = faster streaming. Default: 60
+        fps: Target frames per second (5-30). Default: 20
+    """
+    # Validate and clamp parameters
+    quality = max(30, min(95, quality))  # Quality between 30-95
+    fps = max(5, min(30, fps))  # FPS between 5-30
+    target_frame_time = 1.0 / fps
+    
     boundary = b"frame"
     def gen():
         camera_state["streaming"] = True
         # Store current stream configuration
         if CAMERA_AVAILABLE:
+            print(f"Start stream at resolution: {camera_state['resolution']}, quality: {quality}, target FPS: {fps}")
             camera_state["stream_config"] = picam.create_video_configuration(
-                main={"size": (camera_state["resolution"]["width"], camera_state["resolution"]["height"])}
+                # Use low resolution for fast streaming with RGB888 format (3 channels)
+                main={"size": (camera_state["resolution"]["width"], camera_state["resolution"]["height"]), 
+                      "format": "RGB888"}
             )
+        
+        frame_count = 0
+        start_time = time.time()
+        
         try:
             while True:
+                frame_start = time.time()
+                
+                # Capture and encode with specified quality
+                jpeg_data = _jpeg(_capture(highRes=False), quality=quality)
+                
                 yield (
                     b"--" + boundary +
                     b"\r\nContent-Type: image/jpeg\r\nCache-Control: no-store\r\n\r\n" +
-                    _jpeg(_capture()) + b"\r\n"
+                    jpeg_data + b"\r\n"
                 )
-                time.sleep(0.05)  # ~20 FPS
+                
+                frame_count += 1
+                
+                # Log actual FPS every 100 frames
+                if frame_count % 100 == 0:
+                    elapsed = time.time() - start_time
+                    actual_fps = frame_count / elapsed
+                    print(f"Stream stats: {actual_fps:.1f} FPS, quality: {quality}, avg frame size: {len(jpeg_data)/1024:.1f} KB")
+                
+                # Adaptive frame timing - only sleep if we're ahead of target
+                frame_elapsed = time.time() - frame_start
+                sleep_time = target_frame_time - frame_elapsed
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
+                # If we're behind, skip sleep and send next frame immediately (backpressure)
+                
         finally:
             camera_state["streaming"] = False
+            
     return StreamingResponse(
         gen(),
         media_type=f"multipart/x-mixed-replace; boundary={boundary.decode()}",
@@ -382,9 +484,11 @@ def set_resolution(resolution: ResolutionSettings):
     camera_state["resolution"] = {"width": width, "height": height}
     
     if CAMERA_AVAILABLE:
-        # Stop and reconfigure camera
+        # Stop and reconfigure camera with RGB888 format
         picam.stop()
-        new_config = picam.create_video_configuration(main={"size": (width, height)})
+        new_config = picam.create_video_configuration(
+            main={"size": (width, height), "format": "RGB888"}
+        )
         picam.configure(new_config)
         picam.start()
     else:

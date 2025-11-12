@@ -7,10 +7,11 @@ import asyncio
 processing_enabled = False
 processing_interval = None
 timer_proxy = None  # Keep reference to prevent garbage collection
+current_interval_ms = 1000  # Default to 1 FPS (1000ms)
 current_wavelength = 440e-9  # nm to m
 current_pixelsize = 1.4e-6   # µm to m  
 current_dz = 0.005           # mm to m
-debug_mode = True            # Enable detailed debugging
+debug_mode = False           # Disable debug mode by default
 
 console.log("🔧 Starting PyScript hologram processing setup...")
 
@@ -39,26 +40,52 @@ def fresnel_propagator(E0, ps, lambda0, z):
     Returns:
         Ef: Propagated output field
     """
-    upsample_scale = 1
-    n = upsample_scale * E0.shape[1]  # Image width in pixels
-    grid_size = ps * n                # Grid size in x-direction
-    
-    # Inverse space (frequency domain)
-    fx = np.linspace(-(n-1)/2*(1/grid_size), (n-1)/2*(1/grid_size), n)
-    fy = np.linspace(-(n-1)/2*(1/grid_size), (n-1)/2*(1/grid_size), n)
-    Fx, Fy = np.meshgrid(fx, fy)
-    
-    # Fresnel kernel / point spread function
-    H = np.exp(1j*(2 * np.pi / lambda0) * z) * np.exp(1j * np.pi * lambda0 * z * (Fx**2 + Fy**2))
-    
-    # Compute FFT
-    E0fft = FT(E0)
-    
-    # Multiply spectrum with Fresnel phase factor
-    G = H * E0fft
-    Ef = iFT(G)  # Output after inverse FFT
-    
-    return Ef
+    if 0:
+        upsample_scale = 1
+        n = upsample_scale * E0.shape[1]  # Image width in pixels
+        grid_size = ps * n                # Grid size in x-direction
+        
+        # Inverse space (frequency domain)
+        fx = np.linspace(-(n-1)/2*(1/grid_size), (n-1)/2*(1/grid_size), n)
+        fy = np.linspace(-(n-1)/2*(1/grid_size), (n-1)/2*(1/grid_size), n)
+        Fx, Fy = np.meshgrid(fx, fy)
+        
+        # Fresnel kernel / point spread function
+        H = np.exp(1j*(2 * np.pi / lambda0) * z) * np.exp(1j * np.pi * lambda0 * z * (Fx**2 + Fy**2))
+        
+        # Compute FFT
+        E0fft = FT(E0)
+        
+        # Multiply spectrum with Fresnel phase factor
+        G = H * E0fft
+        Ef = iFT(G)  # Output after inverse FFT
+        
+        return Ef
+    else:
+        upsample_scale = 1
+        n = upsample_scale * E0.shape[1]  # Image width in pixels
+        grid_size = ps * n                # Grid size in x-direction
+        
+        # Inverse space (frequency domain)
+        # 1-D frequency grids
+        fx = np.linspace(-(n-1)/2*(1/grid_size), (n-1)/2*(1/grid_size), n)
+        fy = np.linspace(-(n-1)/2*(1/grid_size), (n-1)/2*(1/grid_size), n)
+
+        # 1-D Fresnel factors
+        phase = 1j * np.pi * lambda0 * z
+        hfx = np.exp(phase * fx**2)          # shape (n,)
+        hfy = np.exp(phase * fy**2)          # shape (n,)
+
+        E0fft = FT(E0)                       # shape (n, n)
+
+        # Broadcasted multiply without forming a 2-D exp:
+        G = E0fft * hfx                      # broadcasts along columns (last axis)
+        G *= hfy[:, None]                    # broadcasts along rows
+
+        Ef = iFT(G)
+        
+        return Ef
+
 
 def apply_image_transformations(image, flip_x=False, flip_y=False, rotation=0):
     """Apply flip and rotation transformations to image"""
@@ -447,12 +474,12 @@ def process_image_for_hologram(width=256, height=256):
 
 def toggle_processing(event=None):
     """Toggle hologram processing on/off"""
-    global processing_enabled, processing_interval, timer_proxy
+    global processing_enabled, processing_interval, timer_proxy, current_interval_ms
     
     processing_enabled = not processing_enabled
     
     if processing_enabled:
-        # Start processing every 1 second (not too frequent to avoid overwhelming)
+        # Start processing with current interval setting
         def process_frame_timer():
             try:
                 process_image_for_hologram()
@@ -461,10 +488,11 @@ def toggle_processing(event=None):
         
         # Create a proper proxy for the JavaScript callback and keep reference
         timer_proxy = create_proxy(process_frame_timer)
-        processing_interval = setInterval(timer_proxy, 1000)
+        processing_interval = setInterval(timer_proxy, current_interval_ms)
         document.getElementById('toggleProcessing').textContent = 'Disable Processing'
         document.getElementById('processing-enabled').textContent = 'Enabled'
-        document.getElementById('status').textContent = 'Processing frames...'
+        document.getElementById('status').textContent = f'Processing frames at {1000/current_interval_ms:.1f} FPS...'
+        console.log(f"✅ Processing started at {current_interval_ms}ms interval ({1000/current_interval_ms:.1f} FPS)")
     else:
         # Stop processing
         if processing_interval:
@@ -479,6 +507,28 @@ def toggle_processing(event=None):
         document.getElementById('toggleProcessing').textContent = 'Enable Processing'
         document.getElementById('processing-enabled').textContent = 'Disabled'
         document.getElementById('status').textContent = 'Processing stopped'
+        console.log("⏸️ Processing stopped")
+
+def update_processing_interval(interval_ms):
+    """Update the processing interval (called from JavaScript)"""
+    global current_interval_ms, processing_interval, timer_proxy, processing_enabled
+    
+    current_interval_ms = int(interval_ms)
+    
+    # If processing is currently enabled, restart with new interval
+    if processing_enabled and processing_interval:
+        # Clear the current interval
+        clearInterval(processing_interval)
+        
+        # Restart with new interval (reuse the same timer_proxy)
+        processing_interval = setInterval(timer_proxy, current_interval_ms)
+        
+        # Update status
+        fps = 1000 / current_interval_ms
+        document.getElementById('status').textContent = f'Processing frames at {fps:.1f} FPS...'
+        console.log(f"⚙️ Processing interval updated to {current_interval_ms}ms ({fps:.1f} FPS)")
+    else:
+        console.log(f"⚙️ Processing interval set to {current_interval_ms}ms ({1000/current_interval_ms:.1f} FPS) - will apply when processing is enabled")
 
 def process_single_frame(event=None):
     """Process a single frame"""
@@ -565,9 +615,12 @@ try:
     # Test with a single frame to verify everything works
     process_image_for_hologram()
     
-    # Make processStaticImage available globally for JavaScript
+    # Make functions available globally for JavaScript
     from js import window
     window.processStaticImage = create_proxy(lambda: process_image_for_hologram())
+    window.processImageForHologram = create_proxy(lambda: process_image_for_hologram())  # Alias for compatibility
+    window.update_processing_interval = create_proxy(update_processing_interval)
+    console.log("✅ Global functions exported: processStaticImage, processImageForHologram, update_processing_interval")
     
 except Exception as e:
     console.log(f"❌ Error setting up event listeners: {e}")
