@@ -1,70 +1,180 @@
-# Technical Documentation
+# HoloBox – Modular Interferometry & Digital Holography in a Box
 
-1. **[Bill_of_Materials (BOM)](./Bill_of_Materials)**: Contains a detailed list of all parts and materials used in the project, including suppliers and part numbers.
+*A fully open-source learning system for optics, interferometry, and holography.*
 
-2. **[Certifications](./Certifications)**: Holds all the relevant certification documents, such as CE compliance and other regulatory certifications your product meets.
+The **HoloBox** is a modular, open-source toolbox that brings classical and digital optics experiments into classrooms, labs, and maker spaces.
+Built on the openUC2 cube system, it enables hands-on experiments ranging from **Michelson/Mach-Zehnder interferometry** to **inline digital holography** and **lensless microscopy**.
+The system combines **precise optical hardware**, **open electronics**, and **modern digital workflows** such as **Jupyter notebooks**, **Python image reconstruction**, and **AI-ready embedded cameras**.
 
-3. **[Change_Logs](./Change_Logs)**: Records all changes made to the project over time, providing a historical record of modifications and updates.
-
-4. **[Contributions](./Contributions)**: Guidelines and information for anyone who wants to contribute to the project, outlining how they can get involved.
-
-5. **[Issue_Tracking](./Issue_Tracking)**: A space for tracking and managing issues, bugs, and potential improvements for the project.
-
-6. **[Legal_and_Regulatory](./Legal_and_Regulatory)**: Contains legal documents, regulatory compliance statements, and warranty information.
-
-7. **[Production_Files](./Production_Files)**: Includes all production-related files such as CAD designs, firmware, and software tools.
-
-8. **[Quality_Control](./Quality_Control)**: Documentation on quality control measures, including inspection reports and testing procedures.
-
-9. **[Readme.md](./Readme.md)**: The main document providing an overview of the project, its structure, and how to navigate the repository.
-
-10. **[Risk_Assessment](./Risk_Assessment)**: Contains risk assessment reports, outlining potential risks and mitigation strategies.
-
-## 11. **[Technical_Documents](./Technical_Documents)**: Holds technical documentation such as assembly guides, user manuals, and design specifications.
-
-### Assembly Guide
-
-#### 25mm lens 10mm diameter
-press lens into insert 
-
-![grafik](https://github.com/user-attachments/assets/629bb0d5-f973-4cb3-b58a-e601ccee9fd5)
-
-
-#### Cylindrical lens
-press lens into insert, convex side looks towards you 
-
-![grafik](https://github.com/user-attachments/assets/129a89a6-df39-46c6-b0a4-19834115cbc7)
+The entire project is open-source: hardware, firmware, software, and teaching materials.
 
 
 
-#### Aquarium probe chamber 
-with dentist glue, glue the glas panels onto the 3 Sides of the Aquarium insert 
+## 🚀 What You Can Do With the HoloBox
 
-![grafik](https://github.com/user-attachments/assets/eadf1350-fe87-4374-94af-d44f362ad0df)
+The HoloBox enables a wide spectrum of optical experiments:
+
+### **Classical Optics & Interference**
+
+* Build and align a **Michelson interferometer**
+* Explore the **Mach–Zehnder interferometer**
+* Perform **double-slit and grating diffraction**
+* Observe **interference fringes**, stability, drift, phase shifts
+* Observe temperature induced variations in the **Michelson Interferometer**
+* Reconstruct **Inline Holography Microscopy/Digital Holography Microscopy (DHM)** using a Raspberry Pi 
+* Visualize thermal expansion by heating one arm of an interferometer
+
+### **Digital Holography**
+
+* Capture **inline holograms** using a point source and the Raspberry Pi Camera
+* Reconstruct the hologram numerically using a Python-based UI or Jupyter notebooks
+* Perform **digital refocusing**, **Fourier analysis**, and **phase retrieval** (comming soon)
+* Understand the connection between physical waves and numerical propagation
+
+### **Lensless Microscopy**
+
+* Image microscopic samples with/without an objective lens
+* Detect **microplastics**, **plankton**, or other transparent objects
+* Explore Fresnel propagation and digital reconstruction of real samples
+
+### **Interdisciplinary Learning**
+
+* Combine physics with **biology**, **environmental science**, or **computer vision**
+* Use programmable electronics (LED modulation, heaters, piezo elements)
+* Learn scientific computing through interactive coding tasks
 
 
-#### XYZ-Stage
+## What’s Included in the Box
 
-screw the bottom plate on the xyz-stage (4x M3x8)
+The HoloBox comes in two modular versions. Schools, labs, and hackers can start with the **Base Set** and expand later with the **Digital Extension**.
 
-screw the sample holder adapter onto the xyz-stage (4x M4x8) 
+### **1. Base Set – Interferometry & Wave Optics**
 
-heat press two threaded nuts into the sample holder adapter (2x M3x4x4.2)
+Includes everything needed for classical optical experiments:
 
-screw the T-piece onte the sample holder adapter and atach an extra screw for fixiating the probe (create nobs with 3x M3x12mm + handle screw) 
+* Precision openUC2 injection-molded cubes
+* 50 mm optical rails & mounts
+* Front-surface mirrors
+* Beam splitter
+* Low-cost laser module
+* Screens for fringe observation
+* Apertures, slits, gratings
+* Worksheets / Wunderbooks
+* Printed build instructions
 
-4 Lego pins hold the xyz-stage in place
+This set enables:
 
-put on caution stickers (3x hot surface, 3x don't cover, 1x hand crush) 
+* Michelson interferometer
+* Mach–Zehnder interferometer
+* Diffraction experiments
+* Basic holography (scratch holograms)
 
-![grafik](https://github.com/user-attachments/assets/b002a872-d3b2-4664-9a89-045cb9bda668)
+#### Inline Holography 
+
+![](./IMAGES/Inline.jpg)
+
+#### Michelson Interferometer
+
+![](./IMAGES/Michael.jpg)
+
+#### Mach Zehnder Interferometer
+
+![](./IMAGES/MachZ.jpg)
 
 
-#### Emission filter
-screw  2 PRTs Filter together to create the insert (4x M3x8)
+### **2. Digital Extension – Holography & Computation**
 
-![grafik](https://github.com/user-attachments/assets/062cfa36-9940-485b-ba81-5954a783c19d)
+Adds the digital and computational layer:
 
-put the emission filter into the PRT filter slide and secure it with the PRT filter Ring
+* **Raspberry Pi Camera** (smart camera that runs our dedicated Operating Sytsem)
+* Download the image from here and flash to the SD card https://github.com/openUC2/TechnicalDocs-openUC2-HoloBox/releases/
+* Electronics module for:
 
-![grafik](https://github.com/user-attachments/assets/b42c3162-af63-439d-837e-553f59aad77d)
+  * LED control
+  * Thermal/piezo phase shifting
+  * Triggering and syncing
+* Python and Jupyter notebook tutorials
+* Digital reconstruction workflows
+* Sample experiments (microplastics, plankton, etc.)
+
+This set enables:
+
+* Inline holography
+* Hologram reconstruction
+* Lensless microscopy
+* Computational imaging
+* Integration into coding classes
+
+![](./IMAGES/Reconstruction.jpg)
+
+
+## Modularity & Open-Source Philosophy
+
+The HoloBox is fully modular and open:
+
+* All CAD files are openly published (STL/STEP)
+* Parts can be replaced or extended via 3D printing
+* Supported by a growing openUC2 community
+* Compatible with the UC2 miniBOX, coreBOX, and Quantum MiniLabs
+* Designed for repairability and long-term use
+* Firmware, software, workflows, and notebooks are open source
+
+The goal:
+**Make advanced optics accessible, affordable, and hackable.**
+
+## Getting Started
+
+1. **Get your kits from openUC2**
+   Write us a mail: purchase@openuc2.com - STP files will be shared once we're fully done with development
+
+2. **Run your first experiment**
+   Choose between Michelson, Mach-Zehnder, diffraction, or holography.
+
+3. **Connect the Raspberry Pi Camera (optional)**
+   Start capturing digital holograms or real-time interference patterns. Connect to the Wifi Hotspot (password: `holobox123`) and open the website http://192.168.4.1
+
+4. **Open the Webiste**
+   Learn how to:
+
+   * Load holograms
+   * Reconstruct using Fresnel propagation
+   * Perform digital refocusing
+   * Visualize spacetime fringes and frequencies
+
+5. **Modify & extend**
+   Print new modules, explore new samples, or write your own analysis scripts.
+
+
+## 📚 Documentation & Resources
+
+Links will be added once this repo structure is finalized.
+
+
+## 🤝 Who Is Behind the HoloBox?
+
+The HoloBox is a collaboration between:
+
+* **openUC2 GmbH** – hardware, electronics, software & production
+* **University of Münster – Institute for Physics Education** – didactic design & teaching materials
+* Supported by regional & national STEM networks
+
+
+
+## 🗺️ Roadmap
+
+* Additional digital reconstruction methods
+* Phase-shifting holography
+* Multi-wavelength illumination
+* Plugin for ImSwitch
+* Extended classroom activities
+* Community-submitted modules
+
+
+## 📝 License
+
+All hardware, firmware, and software are released under open licenses:
+
+* Hardware → **CERN OHL / CC-BY**
+* Software → **MIT**
+* Teaching materials → **CC-BY**
+
