@@ -145,12 +145,12 @@ The goal:
    Print new modules, explore new samples, or write your own analysis scripts.
 
 
-## 📚 Documentation & Resources
+## Documentation & Resources
 
 Links will be added once this repo structure is finalized.
 
 
-## 🤝 Who Is Behind the HoloBox?
+## Who Is Behind the HoloBox?
 
 The HoloBox is a collaboration between:
 
@@ -160,7 +160,7 @@ The HoloBox is a collaboration between:
 
 
 
-## 🗺️ Roadmap
+## Roadmap
 
 * Additional digital reconstruction methods
 * Phase-shifting holography
@@ -170,7 +170,7 @@ The HoloBox is a collaboration between:
 * Community-submitted modules
 
 
-## 📝 License
+## License
 
 All hardware, firmware, and software are released under open licenses:
 
