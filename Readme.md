@@ -73,6 +73,10 @@ This set enables:
 
 ![](./IMAGES/Inline.jpg)
 
+**Reconstruction using the ImSwitch Inline Holography Plugin**
+
+![](./IMAGES/ImSwitchReconstruction.gif)
+
 #### Michelson Interferometer
 
 ![](./IMAGES/Michael.jpg)
